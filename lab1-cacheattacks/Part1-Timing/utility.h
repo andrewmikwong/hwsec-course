@@ -11,23 +11,6 @@
 
 #define SAMPLES 10
 
-
-// Function to read the time stamp counter, which is called tsc for short
-// "rdtscpp" returns a 32bit unsigned integer
-// "rdtscpp64" return a 64 bit unsigned integer
-// Details in https://www.felixcloutier.com/x86/rdtscpp
-static inline uint32_t rdtscpp() {
-    uint32_t rv;
-    asm volatile ("rdtscpp": "=a" (rv) :: "edx", "ecx");
-    return rv;
-}
-
-static inline uint64_t rdtscpp64() {
-    uint32_t low, high;
-    asm volatile ("rdtscpp": "=a" (low), "=d" (high) :: "ecx");
-    return (((uint64_t)high) << 32) | low;
-}
-
 // Function "lfence" wrap the assembly instruction lfence
 // This function performs a serializing operation which ensures that
 // the instructions after "lfence" start execution after
