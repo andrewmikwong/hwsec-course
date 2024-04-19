@@ -23,9 +23,9 @@ MODULE_AUTHOR("Joseph Ravichandran <jravi@mit.edu>");
 MODULE_DESCRIPTION("Spectre lab target module for Secure Hardware Design at MIT");
 
 // The secrets you're trying to leak!
-static volatile char __attribute__((aligned(32768))) kernel_secret3[SHD_SPECTRE_LAB_SECRET_MAX_LEN] = "UNC{h4rd3st}";
-static volatile char __attribute__((aligned(32768))) kernel_secret2[SHD_SPECTRE_LAB_SECRET_MAX_LEN] = "UNC{scary_sp3ctr3!}";
-static volatile char __attribute__((aligned(32768))) kernel_secret1[SHD_SPECTRE_LAB_SECRET_MAX_LEN] = "UNC{k3rn3l_m3m0r135}";
+static volatile char __attribute__((aligned(32768))) kernel_secret3[SHD_SPECTRE_LAB_SECRET_MAX_LEN] = "UNC{j4m35_B0nD}";
+static volatile char __attribute__((aligned(32768))) kernel_secret2[SHD_SPECTRE_LAB_SECRET_MAX_LEN] = "UNC{g0_h33ls}";
+static volatile char __attribute__((aligned(32768))) kernel_secret1[SHD_SPECTRE_LAB_SECRET_MAX_LEN] = "UNC{sp3ctr3_i5_c00l}";
 
 // The bounds checks that you need to use speculative execution to bypass
 static volatile size_t __attribute__((aligned(32768))) secret_leak_limit_part2 = 4;
