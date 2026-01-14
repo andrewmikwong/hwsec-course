@@ -1,1 +1,1 @@
-Lab Materials for COMP 790-184
+Lab Materials for COMP 590-184
