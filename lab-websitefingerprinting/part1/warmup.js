@@ -18,10 +18,34 @@ function measureOneLine() {
   return result;
 }
 
+function median(arr) {
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
 function measureNLines() {
+  const LINE_SIZE = 16; 
+  const N_VALUES = [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000];
   let result = [];
 
-  // TODO: Exercise 1-1
+  for (const N of N_VALUES) {
+    const M = new Array(N * LINE_SIZE).fill(-1);
+
+    const latencies = [];
+    for (let r = 0; r < runs; r++) {
+      const start = performance.now();
+      for (let i = 0; i < N; i++) {
+        let val = M[i * LINE_SIZE];
+        val = val; 
+      }
+      const end = performance.now();
+      latencies.push(end - start);
+    }
+    result.push(median(latencies));
+  }
 
   return result;
 }
