@@ -42,6 +42,8 @@
 
 **Report important parameters used in your attack. For each sweep operation, you access N addresses, and you count the number of sweep operations within a time interval P ms. What values of N and P do you use? How do you choose N? Why do not you choose P to be larger or smaller?**
 
+We used N = 1,000,000 cache lines per sweep and P = 20 ms for the time window. N is the number of addresses we touch in one full sweep over the buffer; I chose it so the buffer is large enough to interact with the last-level cache and so one sweep takes on the order of tens of milliseconds, which gives a useful sweep count per window and a clear difference between idle and victim-active traces. If N were too large we'd get almost no sweeps per window, and if it were too small the counts would be noisier. For P, I didn't go larger because that would give fewer trace points (K = 5000/P) and we'd lose resolution over the 5 seconds, and I didn't go smaller because then each window would be so short that the sweep count per window would be noisier and we might only get 0 or 1 sweep per window, which isn't useful. So P around 20 ms gives a good balance: enough trace points (250) and a stable sweep count per window.
+
 
 
 
