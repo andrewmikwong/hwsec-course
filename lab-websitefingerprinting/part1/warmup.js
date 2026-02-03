@@ -19,9 +19,20 @@ function measureOneLine() {
 }
 
 function measureNLines() {
-  let result = [];
+  const LINE_SIZE = 16;
+  const nCacheLines = 10000;
+  const result = new Array(runs);
+  const M = new Array(runs * nCacheLines * LINE_SIZE).fill(-1);
 
-  // TODO: Exercise 1-1
+  for (let i = 0; i < runs; i++) {
+    const start = performance.now();
+    for (let j = 0; j < nCacheLines; j++) {
+      let val = M[(i * nCacheLines + j) * LINE_SIZE];
+    }
+    const end = performance.now();
+
+    result[i] = end - start;
+  }
 
   return result;
 }
