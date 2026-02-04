@@ -1,7 +1,7 @@
 const runs = 10;
 
 function measureOneLine() {
-  const LINE_SIZE = 16; // 128/sizeof(double) Note that js treats all numbers as double
+  const LINE_SIZE = 8; //64 bytes per cache line
   let result = [];
 
   // Fill with -1 to ensure allocation
@@ -27,7 +27,7 @@ function median(arr) {
 }
 
 function measureNLines() {
-  const LINE_SIZE = 16; 
+  const LINE_SIZE = 8; 
   const N_VALUES = [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000];
   let result = [];
 

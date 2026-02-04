@@ -21,7 +21,7 @@ function record() {
   // Save start timestamp
   start = performance.now();
 
-  const LINE_SIZE = 16;
+  const LINE_SIZE = 8;
   const NUM_LINES = 1000000;  
   const M = new Array(NUM_LINES * LINE_SIZE).fill(-1);
 

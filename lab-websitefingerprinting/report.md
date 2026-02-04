@@ -68,7 +68,16 @@ We used N = 1,000,000 cache lines per sweep and P = 20 ms for the time window. N
 **Include your classification results in your report.**
 
 ```
+                          precision    recall  f1-score   support
 
+https://www.facebook.com       0.97      0.97      0.97        33
+  https://www.google.com       0.97      0.97      0.97        39
+ https://www.nytimes.com       0.96      1.00      0.98        52
+ https://www.youtube.com       1.00      0.94      0.97        36
+
+                accuracy                           0.97       160
+               macro avg       0.98      0.97      0.97       160
+            weighted avg       0.98      0.97      0.97       160
 ```
 
 
