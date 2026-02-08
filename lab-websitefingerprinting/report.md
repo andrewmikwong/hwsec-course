@@ -88,6 +88,16 @@ https://www.facebook.com       0.97      0.97      0.97        33
 **Include your new accuracy results for the modified attack code in your report.**
 
 ```
+                          precision    recall  f1-score   support
+
+https://www.facebook.com       0.81      0.77      0.79        44
+  https://www.google.com       0.71      0.73      0.72        37
+ https://www.nytimes.com       0.95      1.00      0.98        40
+ https://www.youtube.com       0.92      0.90      0.91        39
+
+                accuracy                           0.85       160
+               macro avg       0.85      0.85      0.85       160
+            weighted avg       0.85      0.85      0.85       160
 
 ```
 
