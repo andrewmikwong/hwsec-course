@@ -4,11 +4,11 @@
 
 **Report your browser version, CPU type, cache size, RAM amount, and OS. We use this information to learn about the attack’s behavior on different machines.**
 
-- Browser:
-- CPU:
-- Cache sizes:
-- RAM:
-- OS:
+- Browser: Google Chrome
+- CPU: Apple M2
+- Cache sizes: 128B
+- RAM: 16 GB
+- OS: macOS Sequoia Version 15.2
 
 
 
@@ -19,14 +19,14 @@
 
 | Number of Cache Lines | Median Access Latency (ms) |
 | --------------------- | -------------------------- |
-| 1                     |                            |
-| 10                    |                            |
-| 100                   |                            |
-| 1,000                 |                            |
-| 10,000                |                            |
-| 100,000               |                            |
-| 1,000,000             |                            |
-| 10,000,000            |                            |
+| 1                     | 0                           |
+| 10                    | 0                           |
+| 100                   | 0                           |
+| 1,000                 | 0                           |
+| 10,000                | 0.04999998211860657         |
+| 100,000               | 0.30000001192092896         |
+| 1,000,000             | 1.300000011920929           |
+| 10,000,000            | 10.450000017881393          |
 
 
 
@@ -35,7 +35,7 @@
 
 **According to your measurement results, what is the resolution of your `performance.now()`? In order to measure differences in time with `performance.now()``, approximately how many cache accesses need to be performed?**
 
-
+In order to measure differences in time with "performance now", we would need at least 10,000 cache accesses for a resoultion of ~ 0.05, and a noticiable time difference compared to previous attempts. 
 
 
 ## 2-2

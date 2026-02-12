@@ -1,6 +1,6 @@
 // Number of sweep counts
 // TODO (Exercise 2-1): Choose an appropriate value!
-let P = 20;
+let P = 10;
 
 // Number of elements in your trace
 let K = 5 * 1000 / P; 
