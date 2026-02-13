@@ -1,4 +1,4 @@
-
+Project Team Members: Aditi Nayak, Ben Luis, Bramhi Chougule, Aidan Lee 
 
 ## Optional
 
