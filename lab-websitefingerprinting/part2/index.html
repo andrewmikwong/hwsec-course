@@ -19,10 +19,6 @@
         margin-bottom: 16px;
       }
 
-      p {
-        margin-bottom: 8px;
-      }
-
       #buttons {
         margin-bottom: 16px;
       }
@@ -49,98 +45,307 @@
       .trace {
         margin-bottom: 16px;
       }
+
+      .trace-label {
+        font-size: 12px;
+        color: #444;
+        margin-bottom: 4px;
+      }
+
+      #status {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #444;
+      }
+
+      #error {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #b00020;
+        white-space: pre-wrap;
+      }
     </style>
   </head>
+
   <body>
     <h1>Website Fingerprinting Lab</h1>
+
     <div id="buttons">
       <button id="collect-trace">Collect trace</button>
       <button id="download-traces">Download traces</button>
     </div>
+
+    <div id="status"></div>
+    <div id="error"></div>
+
     <div id="traces"></div>
+
     <script src="https://d3js.org/d3.v6.js"></script>
     <script type="text/javascript">
       const worker = new Worker("worker.js");
 
       const collectTraceButton = document.getElementById("collect-trace");
       const downloadTracesButton = document.getElementById("download-traces");
+      const statusEl = document.getElementById("status");
+      const errorEl = document.getElementById("error");
 
-      // Default values for when the automation script isn't being used. When
-      // the script is in use, these values will get overwritten.
+      // When automation is in use, these get overwritten.
       window.trace_length = 5000;
       window.using_automation_script = false;
 
       window.recording = false;
-      window.traces = [];
+      window.raw_traces = [];
 
-      let traceIds = [];
+      // ----------------------------
+      // DISPLAY TUNING (ANTI-YELLOW)
+      // ----------------------------
 
-      worker.onmessage = (e) => {
+      // Keep a little warmup visible (like the reference image)
+      const WARMUP_BUCKETS_DISPLAY = 5;
+
+      // Use rank-based coloring (ECDF). If things still compress to yellow,
+      // we apply a HIGH-END STRETCH that pulls values away from 1.0.
+      //
+      // If your plot is still too yellow, LOWER this (0.25).
+      // If your plot is too dark/purple, RAISE this (0.55).
+      const HIGH_END_STRETCH_ALPHA = 0.35; // < 1 expands the high end downward
+
+      // Optional: if the plot is too dark after stretch, reduce this;
+      // if too bright, increase it.
+      const FINAL_GAMMA = 1.0; // keep 1.0 unless you want extra tuning
+
+      let watchdog = null;
+
+      function setStatus(msg) {
+        statusEl.textContent = msg || "";
+      }
+
+      function setError(msg) {
+        errorEl.textContent = msg || "";
+      }
+
+      function resetUI() {
         window.recording = false;
+        collectTraceButton.innerText = "Collect trace";
+        collectTraceButton.className = "";
+        clearWatchdog();
+      }
 
-        const trace = JSON.parse(e.data);
-        window.traces.push(trace);
+      function startWatchdog() {
+        clearWatchdog();
+        const tl =
+          typeof window.trace_length === "number" && isFinite(window.trace_length)
+            ? window.trace_length
+            : 5000;
 
-        if (window.using_automation_script) {
-          // Don't display traces when automation script is in use
-          return;
+        const timeoutMs = tl + 15000;
+
+        watchdog = setTimeout(() => {
+          console.warn("Trace watchdog timeout hit.");
+          setError(
+            "Trace timed out. Most likely the worker crashed or never loaded.\n" +
+              "Open DevTools Console for errors. Also ensure you're serving via http:// (not file://)."
+          );
+          resetUI();
+        }, timeoutMs);
+      }
+
+      function clearWatchdog() {
+        if (watchdog) clearTimeout(watchdog);
+        watchdog = null;
+      }
+
+      // Rank-based mapping helper
+      function buildRankMapper(values) {
+        const sorted = values.slice().sort((a, b) => a - b);
+        if (sorted.length <= 1) {
+          return {
+            rank01: () => 0,
+            sortedLen: sorted.length,
+          };
         }
+        return {
+          rank01: (v) => {
+            const idx = d3.bisectRight(sorted, v);
+            return idx / (sorted.length - 1);
+          },
+          sortedLen: sorted.length,
+        };
+      }
 
-        // Create new trace div
+      // Apply a high-end stretch so values near 1.0 spread out and stop looking all yellow.
+      // This is the key difference vs your earlier gamma approach.
+      function highEndStretch(t, alpha) {
+        // t in [0,1]
+        // For alpha < 1: expands high end downward (reduces saturation at yellow)
+        // Example: t=0.99 -> 1 - (0.01^0.35) ≈ 0.80 (more orange/pink)
+        return 1 - Math.pow(1 - t, alpha);
+      }
+
+      function renderAllTraces() {
         const parent = document.getElementById("traces");
-        const div = document.createElement("div");
-        const traceId = "a" + Math.random().toString().substring(2, 10);
-        div.setAttribute("id", traceId);
-        div.className = "trace";
-        parent.appendChild(div);
-        traceIds.push(traceId);
+        parent.innerHTML = "";
 
-        // Trace dimensions
+        if (window.raw_traces.length === 0) return;
+
         const width = parent.getBoundingClientRect().width;
         const height = 64;
 
-        // Create div for new trace
-        const svg = d3
-          .select("#" + traceId)
-          .append("svg")
-          .attr("width", width)
-          .attr("height", height);
+        // Flatten trimmed values across ALL traces
+        const trimmedArrays = window.raw_traces
+          .map((t) => t.slice(WARMUP_BUCKETS_DISPLAY))
+          .filter((t) => t.length > 0);
 
-        // Find largest value across all traces
-        const maxVal = d3.max(window.traces, (d) => d3.max(d));
+        if (trimmedArrays.length === 0) return;
 
-        for (let i = 0; i < window.traces.length; i++) {
-          // Re-visualize all traces each time in case maxVal changes
-          const x = d3
-            .scaleLinear()
-            .domain([0, window.traces[i].length])
-            .range([0, width]);
+        const flat = trimmedArrays.flat();
+        if (flat.length === 0) return;
 
-          const color = d3
-            .scaleQuantize()
-            .range(["#0d0887", "#7e03a8", "#cc4778", "#f89540", "#f0f921"])
-            .domain([0, maxVal]);
+        // Build global rank mapper (ECDF)
+        const { rank01, sortedLen } = buildRankMapper(flat);
 
-          svg
-            .selectAll()
-            .data(window.traces[i].map((x, i) => ({ index: i, value: x })))
-            .join("rect")
-            .attr("x", (d) => x(d.index))
-            .attr("y", 0)
-            .attr("width", x(1))
-            .attr("height", height)
-            .style("fill", (d) => color(d.value));
+        // Measure how "yellow-prone" the ranks are (if most ranks are very high)
+        // This helps you debug quickly.
+        let fracAbove095 = 0;
+        for (let i = 0; i < flat.length; i++) {
+          const r = rank01(flat[i]);
+          if (r > 0.95) fracAbove095++;
+        }
+        fracAbove095 /= flat.length;
+
+        function colorFor(v) {
+          let t = rank01(v); // [0,1] percentile rank
+
+          // Key: reduce “all yellow” by expanding the high end downward
+          t = highEndStretch(t, HIGH_END_STRETCH_ALPHA);
+
+          // Optional final gamma (leave at 1.0 unless you want extra tuning)
+          t = Math.pow(t, FINAL_GAMMA);
+
+          // Plasma color
+          return d3.interpolatePlasma(t);
         }
 
-        // Reset UI
+        console.log({
+          displayMode: "global ECDF rank + high-end stretch",
+          WARMUP_BUCKETS_DISPLAY,
+          HIGH_END_STRETCH_ALPHA,
+          FINAL_GAMMA,
+          samples: flat.length,
+          sortedLen,
+          fracRanksAbove0_95: fracAbove095,
+          // quick numeric sanity:
+          globalMin: d3.min(flat),
+          globalMax: d3.max(flat),
+        });
+
+        window.raw_traces.forEach((trace, idx) => {
+          const t = trace.slice(WARMUP_BUCKETS_DISPLAY);
+
+          const row = document.createElement("div");
+          row.className = "trace";
+          parent.appendChild(row);
+
+          const label = document.createElement("div");
+          label.className = "trace-label";
+          label.textContent = `Trace ${idx} (display trimmed: ${WARMUP_BUCKETS_DISPLAY} buckets)`;
+          row.appendChild(label);
+
+          const svg = d3
+            .select(row)
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .style("shape-rendering", "crispEdges"); // sharper stripes
+
+          // Use integer width so rectangles don't blur
+          const cellW = Math.max(1, Math.floor(width / Math.max(1, t.length)));
+
+          svg
+            .selectAll("rect")
+            .data(t.map((v, i) => ({ i, v })))
+            .enter()
+            .append("rect")
+            .attr("x", (d) => d.i * cellW)
+            .attr("y", 0)
+            .attr("width", cellW)
+            .attr("height", height)
+            .style("fill", (d) => colorFor(d.v));
+        });
+      }
+
+      // --- Worker error handling ---
+      worker.onerror = (e) => {
+        console.error("Worker error:", e);
+        setError(
+          "Worker error: " +
+            (e.message || "unknown") +
+            "\nCheck that worker.js is being served and there are no JS errors."
+        );
+        resetUI();
+      };
+
+      worker.onmessageerror = (e) => {
+        console.error("Worker message decode error:", e);
+        setError("Worker message error: could not decode message.");
+        resetUI();
+      };
+
+      worker.onmessage = (e) => {
+        clearWatchdog();
+
+        window.recording = false;
+
+        let parsed;
+        try {
+          parsed = JSON.parse(e.data);
+        } catch (err) {
+          console.error("Bad JSON from worker:", e.data);
+          setError("Bad JSON from worker. Check console.");
+          resetUI();
+          return;
+        }
+
+        if (parsed && parsed.__error) {
+          console.error("Worker reported error:", parsed);
+          setError("Worker reported error:\n" + parsed.message);
+          resetUI();
+          return;
+        }
+
+        const trace = parsed;
+        if (!Array.isArray(trace)) {
+          setError("Unexpected worker output (not an array). Check console.");
+          console.log("Worker output:", parsed);
+          resetUI();
+          return;
+        }
+
+        // Sanity check for "flat signal"
+        const mn = trace.reduce((a, b) => Math.min(a, b), Infinity);
+        const mx = trace.reduce((a, b) => Math.max(a, b), -Infinity);
+        console.log("trace min/max:", mn, mx);
+
+        window.raw_traces.push(trace);
+
+        if (!window.using_automation_script) {
+          renderAllTraces();
+        }
+
         collectTraceButton.innerText = "Collect trace";
         collectTraceButton.className = "";
+        setStatus(`Collected ${window.raw_traces.length} trace(s).`);
+        setError("");
       };
 
       function collectTrace() {
+        setError("");
+        setStatus("Collecting trace...");
         collectTraceButton.innerText = "Collecting trace...";
         collectTraceButton.className = "disabled";
         window.recording = true;
+
+        startWatchdog();
 
         worker.postMessage({
           type: "start",
@@ -152,13 +357,17 @@
         if (window.recording) return;
 
         window.recording = true;
+        setError("");
+        setStatus("Starting in 3...");
         collectTraceButton.innerText = "Starting in 3...";
         collectTraceButton.className = "disabled";
 
         setTimeout(() => {
+          setStatus("Starting in 2...");
           collectTraceButton.innerText = "Starting in 2...";
 
           setTimeout(() => {
+            setStatus("Starting in 1...");
             collectTraceButton.innerText = "Starting in 1...";
             setTimeout(collectTrace, 1000);
           }, 1000);
@@ -166,7 +375,7 @@
       };
 
       downloadTracesButton.onclick = () => {
-        const blob = new Blob([JSON.stringify({ traces: window.traces })], {
+        const blob = new Blob([JSON.stringify({ traces: window.raw_traces })], {
           type: "application/json",
         });
 
@@ -180,6 +389,8 @@
         elem.click();
         document.body.removeChild(elem);
       };
+
+      setStatus("Ready.");
     </script>
   </body>
 </html>
