@@ -89,30 +89,16 @@
       const statusEl = document.getElementById("status");
       const errorEl = document.getElementById("error");
 
-      // When automation is in use, these get overwritten.
       window.trace_length = 5000;
       window.using_automation_script = false;
 
       window.recording = false;
       window.raw_traces = [];
 
-      // ----------------------------
-      // DISPLAY TUNING (ANTI-YELLOW)
-      // ----------------------------
-
-      // Keep a little warmup visible (like the reference image)
       const WARMUP_BUCKETS_DISPLAY = 5;
 
-      // Use rank-based coloring (ECDF). If things still compress to yellow,
-      // we apply a HIGH-END STRETCH that pulls values away from 1.0.
-      //
-      // If your plot is still too yellow, LOWER this (0.25).
-      // If your plot is too dark/purple, RAISE this (0.55).
-      const HIGH_END_STRETCH_ALPHA = 0.35; // < 1 expands the high end downward
+      const HIGH_END_STRETCH_ALPHA = 0.35;
 
-      // Optional: if the plot is too dark after stretch, reduce this;
-      // if too bright, increase it.
-      const FINAL_GAMMA = 1.0; // keep 1.0 unless you want extra tuning
 
       let watchdog = null;
 
@@ -155,7 +141,6 @@
         watchdog = null;
       }
 
-      // Rank-based mapping helper
       function buildRankMapper(values) {
         const sorted = values.slice().sort((a, b) => a - b);
         if (sorted.length <= 1) {
@@ -173,12 +158,8 @@
         };
       }
 
-      // Apply a high-end stretch so values near 1.0 spread out and stop looking all yellow.
-      // This is the key difference vs your earlier gamma approach.
       function highEndStretch(t, alpha) {
-        // t in [0,1]
-        // For alpha < 1: expands high end downward (reduces saturation at yellow)
-        // Example: t=0.99 -> 1 - (0.01^0.35) ≈ 0.80 (more orange/pink)
+
         return 1 - Math.pow(1 - t, alpha);
       }
 
@@ -191,7 +172,6 @@
         const width = parent.getBoundingClientRect().width;
         const height = 64;
 
-        // Flatten trimmed values across ALL traces
         const trimmedArrays = window.raw_traces
           .map((t) => t.slice(WARMUP_BUCKETS_DISPLAY))
           .filter((t) => t.length > 0);
@@ -201,11 +181,8 @@
         const flat = trimmedArrays.flat();
         if (flat.length === 0) return;
 
-        // Build global rank mapper (ECDF)
         const { rank01, sortedLen } = buildRankMapper(flat);
 
-        // Measure how "yellow-prone" the ranks are (if most ranks are very high)
-        // This helps you debug quickly.
         let fracAbove095 = 0;
         for (let i = 0; i < flat.length; i++) {
           const r = rank01(flat[i]);
@@ -214,15 +191,12 @@
         fracAbove095 /= flat.length;
 
         function colorFor(v) {
-          let t = rank01(v); // [0,1] percentile rank
+          let t = rank01(v);
 
-          // Key: reduce “all yellow” by expanding the high end downward
           t = highEndStretch(t, HIGH_END_STRETCH_ALPHA);
 
-          // Optional final gamma (leave at 1.0 unless you want extra tuning)
           t = Math.pow(t, FINAL_GAMMA);
 
-          // Plasma color
           return d3.interpolatePlasma(t);
         }
 
@@ -234,7 +208,6 @@
           samples: flat.length,
           sortedLen,
           fracRanksAbove0_95: fracAbove095,
-          // quick numeric sanity:
           globalMin: d3.min(flat),
           globalMax: d3.max(flat),
         });
@@ -256,9 +229,8 @@
             .append("svg")
             .attr("width", width)
             .attr("height", height)
-            .style("shape-rendering", "crispEdges"); // sharper stripes
+            .style("shape-rendering", "crispEdges"); 
 
-          // Use integer width so rectangles don't blur
           const cellW = Math.max(1, Math.floor(width / Math.max(1, t.length)));
 
           svg
@@ -274,7 +246,6 @@
         });
       }
 
-      // --- Worker error handling ---
       worker.onerror = (e) => {
         console.error("Worker error:", e);
         setError(
@@ -321,7 +292,6 @@
           return;
         }
 
-        // Sanity check for "flat signal"
         const mn = trace.reduce((a, b) => Math.min(a, b), Infinity);
         const mx = trace.reduce((a, b) => Math.max(a, b), -Infinity);
         console.log("trace min/max:", mn, mx);

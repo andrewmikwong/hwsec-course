@@ -1,55 +1,49 @@
-let P = 20;               // ms per bucket (keep your chosen value)
-let K = 0;                // computed from trace_length
-let sink = 0;
+// Number of sweep counts
+let P = 10;
 
-// Allocate memory ONCE (avoid alloc/GC noise during recording)
-const LINE_STRIDE = 16;   // 16 * 4 bytes = 64 bytes stride
-const NUM_LINES = 300000; // keep reasonable to avoid memory pressure
-const M = new Int32Array(NUM_LINES * LINE_STRIDE);
-for (let i = 0; i < NUM_LINES; i++) {
-  M[i * LINE_STRIDE] = i;
-}
+// Number of elements in your trace
+let K = 5 * 1000 / P; 
 
-function doOneSweep() {
-  for (let j = 0; j < NUM_LINES; j++) {
-    sink = (sink + M[j * LINE_STRIDE]) | 0;
-  }
-}
+// Array of length K with your trace's values
+let T;
 
-function record(traceLengthMs) {
-  K = Math.floor(traceLengthMs / P);
-  const T = new Int32Array(K);
+// Value of performance.now() when you started recording your trace
+let start;
 
-  // Warm up briefly so the first buckets aren't dominated by startup effects
-  const warmEnd = performance.now() + 300;
-  while (performance.now() < warmEnd) {
-    doOneSweep();
-  }
+function record() {
+  // Create empty array for saving trace values
+  T = new Array(K);
 
-  const start = performance.now();
+  // Fill array with -1 so we can be sure memory is allocated
+  T.fill(-1, 0, T.length);
+
+  // Save start timestamp
+  start = performance.now();
+
+  const LINE_SIZE = 8;
+  const NUM_LINES = 1000000;  
+  const M = new Array(NUM_LINES * LINE_SIZE).fill(-1);
 
   for (let i = 0; i < K; i++) {
     const windowEnd = start + (i + 1) * P;
     let count = 0;
-
     while (performance.now() < windowEnd) {
-      doOneSweep();
+      for (let j = 0; j < NUM_LINES; j++) {
+        let val = M[j * LINE_SIZE];
+        val = val;
+      }
       count++;
     }
     T[i] = count;
   }
 
-  // keep sink observable
-  self.__sink = sink;
-
-  postMessage(JSON.stringify(Array.from(T)));
+  // Once done recording, send result to main thread
+  postMessage(JSON.stringify(T));
 }
 
 // DO NOT MODIFY BELOW THIS LINE -- PROVIDED BY COURSE STAFF
 self.onmessage = (e) => {
   if (e.data.type === "start") {
-    const tl =
-      typeof e.data.trace_length === "number" ? e.data.trace_length : 5000;
-    setTimeout(() => record(tl), 0);
+    setTimeout(record, 0);
   }
 };
