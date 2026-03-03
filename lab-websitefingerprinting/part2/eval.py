@@ -5,35 +5,49 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
+# Optional: drop early buckets that often contain warm-up artifacts.
+# If you don't want this, set WARMUP_BUCKETS = 0.
+WARMUP_BUCKETS = 30
+
 def eval():
+    # 1) Load once
+    with open("traces20.out", "r") as f:
+        data = json.load(f)
+
+    X = np.array(data["traces"], dtype=np.float32)
+    y = np.array(data["labels"])
+
+    # Optional warm-up trim
+    if WARMUP_BUCKETS > 0:
+        X = X[:, WARMUP_BUCKETS:]
+
     y_pred_full, y_test_full = [], []
 
     # Re-train 10 times in order to reduce effects of randomness
     for i in range(10):
-        ### TODO: Exercise 2-5
-        ### 1. Load data from traces file
-        with open("traces20.out", "r") as f:
-            data = json.load(f)
-        
-        traces = np.array(data["traces"])
-        labels = np.array(data["labels"])
+        # 2) Stratified split keeps label balance
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y,
+            test_size=0.2,
+            shuffle=True,
+            stratify=y,
+            random_state=i
+        )
 
-        ### 2. Split data into X_train, X_test, y_train, y_test with train_test_split
-        X_train, X_test, y_train, y_test = train_test_split(traces, labels, test_size=0.2)
-
-        ### 3. Train classifier with X_train and y_train
-        clf = RandomForestClassifier()
+        # 3) More stable RF (more trees) + reproducible
+        clf = RandomForestClassifier(
+            n_estimators=300,
+            random_state=i,
+            n_jobs=-1
+        )
         clf.fit(X_train, y_train)
 
-        ### 4. Use classifier to make predictions on X_test. Save the result to a variable called y_pred
         y_pred = clf.predict(X_test)
 
-        # Do not modify the next two lines
-        y_test_full.extend(y_test)
-        y_pred_full.extend(y_pred)
+        y_test_full.extend(y_test.tolist())
+        y_pred_full.extend(y_pred.tolist())
 
-    ### TODO: Exercise 2-5 (continued)
-    ### 5. Print classification report using y_test_full and y_pred_full
+    # 5) Report across all collected predictions
     print(classification_report(y_test_full, y_pred_full))
 
 if __name__ == "__main__":
