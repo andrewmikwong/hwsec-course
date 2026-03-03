@@ -5,29 +5,36 @@ import sys
 import os
 
 # --- CONFIGURATION ---
-SENDER_CMD = ["./sender"]
-RECEIVER_CMD = ["./receiver"]
+# CPUs from cpu.mk
+SENDER_CPU = "7"
+RECEIVER_CPU = "23"
+
+# Commands with taskset
+SENDER_CMD = ["taskset", "-c", SENDER_CPU, "./sender"]
+RECEIVER_CMD = ["taskset", "-c", RECEIVER_CPU, "./receiver"]
+
 TARGET_SET = 42
-TIMEOUT = 5 # Seconds per test
+TIMEOUT = 5 
 
 # Range for threshold tuning
-MIN_THRESHOLD = 200
-MAX_THRESHOLD = 2000
+# L2 Hit (12 accesses) ~= 12 * 120 = 1440 cycles
+# DRAM Miss (12 accesses) ~= 12 * 300 = 3600 cycles
+# We should sweep 1000 to 3000
+MIN_THRESHOLD = 800
+MAX_THRESHOLD = 3000
+STEP = 200
 
 def compile_code(threshold):
     """Compiles receiver.c with a specific threshold."""
-    # Read receiver.c
     with open("receiver.c", "r") as f:
         content = f.read()
     
     # Replace threshold
-    # Look for: if (total_time > 800)
     new_content = re.sub(r"if \(total_time > \d+\)", f"if (total_time > {threshold})", content)
     
     with open("receiver.c", "w") as f:
         f.write(new_content)
         
-    # Compile
     subprocess.run(["make"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def run_test(threshold):
@@ -35,29 +42,21 @@ def run_test(threshold):
     print(f"Testing Threshold: {threshold}...", end="")
     sys.stdout.flush()
     
-    # Start Receiver
     receiver = subprocess.Popen(RECEIVER_CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    
-    # Start Sender
     sender = subprocess.Popen(SENDER_CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
     try:
-        # Initialize
-        # Receiver waits for Enter
-        # Sender waits for Number
-        
-        # Give them a moment to start up
         time.sleep(0.5)
         
-        # Tell Receiver to start listening
+        # Start Receiver
         receiver.stdin.write("\n")
         receiver.stdin.flush()
         
-        # Tell Sender to send TARGET_SET
+        # Start Sender
         sender.stdin.write(f"{TARGET_SET}\n")
         sender.stdin.flush()
         
-        # Wait and read output
+        # Monitor
         start_time = time.time()
         found = False
         while time.time() - start_time < TIMEOUT:
@@ -65,7 +64,6 @@ def run_test(threshold):
             if not line:
                 break
             
-            # Check for "Received value: 42"
             match = re.search(r"Received value: (\d+)", line)
             if match:
                 val = int(match.group(1))
@@ -89,33 +87,25 @@ def run_test(threshold):
     return found
 
 def binary_search_tuning():
-    print("--- AUTO-TUNING THRESHOLD ---")
-    
-    # We want to find the range [Low, High] where it works.
-    # But binary search finds a single point.
-    # Instead, let's just sweep with a coarse step to find the working window.
-    # Binary search is risky if the function isn't monotonic (noise makes it jagged).
+    print(f"--- AUTO-TUNING (CPUs {SENDER_CPU} & {RECEIVER_CPU}) ---")
     
     working_thresholds = []
     
-    # Coarse Sweep
-    for t in range(MIN_THRESHOLD, MAX_THRESHOLD, 100):
+    for t in range(MIN_THRESHOLD, MAX_THRESHOLD, STEP):
         compile_code(t)
         if run_test(t):
             working_thresholds.append(t)
             
     if not working_thresholds:
         print("\nNO WORKING THRESHOLD FOUND.")
-        print("Possible issues: L2_WAYS mismatch, Wait time too short, or Hardware noise.")
         return
         
     print(f"\nWorking Range: {min(working_thresholds)} - {max(working_thresholds)}")
     best_threshold = sum(working_thresholds) // len(working_thresholds)
     print(f"Recommended Threshold: {best_threshold}")
     
-    # Apply best
     compile_code(best_threshold)
-    print("Applied best threshold. Ready to run manually.")
+    print("Applied best threshold.")
 
 if __name__ == "__main__":
     binary_search_tuning()
