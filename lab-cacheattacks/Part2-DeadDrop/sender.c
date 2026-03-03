@@ -1,10 +1,22 @@
 #include "util.h"
 #include <sys/mman.h>
 
+// Simple pseudo-random shuffle for sender
+void shuffle(int *array, size_t n) {
+    if (n > 1) {
+        size_t i;
+        for (i = 0; i < n - 1; i++) {
+            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+            int t = array[j];
+            array[j] = array[i];
+            array[i] = t;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
   // Allocate a buffer using huge page
-  // See the handout for details about hugepage management
   void *buf= mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
   
   if (buf == (void*) - 1) {
@@ -12,8 +24,12 @@ int main(int argc, char **argv)
      exit(EXIT_FAILURE);
   }
 
-  // Initialize buffer to ensure allocation
+  // Initialize buffer
   memset(buf, 1, BUFF_SIZE);
+
+  // Create an array of indices for random access
+  int indices[WAY_COUNT];
+  for(int i=0; i<WAY_COUNT; i++) indices[i] = i;
 
   printf("Please type a message (integer 0-255).\n");
 
@@ -30,30 +46,38 @@ int main(int argc, char **argv)
 
       // Synchronize start
       uint64_t start = get_time();
-      // Align to next large boundary to sync with receiver
       start = (start / SLOT_TIME + 10) * SLOT_TIME; 
 
-      // Send 8 bits
-      for (int i = 0; i < 8; i++) {
-          int bit = (secret >> i) & 1;
+      // Send 9 bits: Start Bit (1) + 8 Data Bits
+      for (int i = -1; i < 8; i++) {
+          int bit;
+          if (i == -1) bit = 1; // Start Bit
+          else bit = (secret >> i) & 1;
           
-          // Wait for the start of the slot
           while (get_time() < start) {}
           
           if (bit) {
-              // Send '1': Hammer the eviction set to evict receiver
-              // We access WAY_COUNT lines at STRIDE intervals
-              // This targets the specific cache set determined by offset 0
-              uint64_t end_hammer = start + (SLOT_TIME / 2);
+              // Send '1': Hammer the eviction set
+              // Use randomized access pattern to confuse prefetcher
+              uint64_t end_hammer = start + (SLOT_TIME * 9 / 10);
               while (get_time() < end_hammer) {
-                  for (int w = 0; w < WAY_COUNT; w++) {
-                      // Access memory
-                      volatile char *p = (char *)buf + (w * STRIDE);
+                  // Shuffle indices every few iterations to keep it random
+                  // (Doing it every time might be too slow, so we do it once per bit or just use a fixed random permutation)
+                  // For simplicity, let's just use a fixed "random-ish" stride or simple reverse
+                  
+                  // Forward pass
+                  for (int k = 0; k < WAY_COUNT; k++) {
+                      volatile char *p = (char *)buf + (indices[k] * STRIDE);
+                      *p; 
+                  }
+                  // Backward pass
+                  for (int k = WAY_COUNT - 1; k >= 0; k--) {
+                      volatile char *p = (char *)buf + (indices[k] * STRIDE);
                       *p; 
                   }
               }
           } else {
-              // Send '0': Do nothing (idle)
+              // Send '0': Idle
           }
           
           start += SLOT_TIME;
