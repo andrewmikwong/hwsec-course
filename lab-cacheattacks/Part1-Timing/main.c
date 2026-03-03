@@ -31,7 +31,13 @@ int main (int ac, char **av) {
 
     // [1.2] TODO: Uncomment the following line to allocate a buffer of a size
     // of your chosing. This will help you measure the latencies at L2 and L3.
-    uint64_t *eviction_buffer = (uint64_t *)malloc(L3_SIZE * 2);
+    uint64_t *eviction_buffer = (uint64_t *)malloc(L3_SIZE * 4);
+    if (eviction_buffer != NULL) {
+        // Initialize buffer to ensure physical pages are allocated (prevent zero-page optimization)
+        for (uint64_t k = 0; k < (L3_SIZE * 4) / sizeof(uint64_t); k++) {
+            eviction_buffer[k] = k;
+        }
+    }
 
     // Example: Measure L1 access latency, store results in l1_latency array
     for (int i=0; i<SAMPLES; i++){
@@ -58,7 +64,6 @@ int main (int ac, char **av) {
     // [1.2] TODO: Measure L2 Latency, store results in l2_latency array
     // ======
     //
-    
     for (int i=0; i<SAMPLES; i++) {
         // Step 1: Bring target into L1 (and L2)
         tmp = target_buffer[0]; // Load to L1
@@ -67,7 +72,7 @@ int main (int ac, char **av) {
         // Step 2: Evict from L1 by accessing a buffer size of L1_SIZE
         // We stride by 64 bytes (cache line size) to touch every set
         for (int j = 0; j < (4 * L1_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
-             tmp = eviction_buffer[j];
+             tmp = (char)eviction_buffer[j];
         }
         // Step 3: Measure access (should miss L1, hit L2)
         l2_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
@@ -84,7 +89,7 @@ int main (int ac, char **av) {
         // Step 2: Evict from L2 by accessing a buffer size of L2_SIZE
         // (This naturally evicts L1 as well)
         for (int j = 0; j < (4 * L2_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
-             tmp = eviction_buffer[j];
+             tmp = (char)eviction_buffer[j];
         }
 
         // Step 3: Measure access (should miss L1/L2, hit L3)

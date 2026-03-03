@@ -9,7 +9,7 @@
 #ifndef __UTILITY_H__
 #define __UTILITY_H__
 
-#define SAMPLES 10
+#define SAMPLES 1000
 
 // Function "lfence" wrap the assembly instruction lfence
 // This function performs a serializing operation which ensures that
