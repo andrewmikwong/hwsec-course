@@ -66,7 +66,7 @@ int main (int ac, char **av) {
         
         // Step 2: Evict from L1 by accessing a buffer size of L1_SIZE
         // We stride by 64 bytes (cache line size) to touch every set
-        for (int j = 0; j < (2 * L1_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
+        for (int j = 0; j < (4 * L1_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
              tmp = eviction_buffer[j];
         }
         // Step 3: Measure access (should miss L1, hit L2)
@@ -83,7 +83,7 @@ int main (int ac, char **av) {
 
         // Step 2: Evict from L2 by accessing a buffer size of L2_SIZE
         // (This naturally evicts L1 as well)
-        for (int j = 0; j < (2 * L2_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
+        for (int j = 0; j < (4 * L2_SIZE) / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
              tmp = eviction_buffer[j];
         }
 
