@@ -1,9 +1,9 @@
 #include "utility.h"
 
 // TODO: Uncomment the following lines and fill in the correct size
-//#define L1_SIZE [TODO]
-//#define L2_SIZE [TODO]
-//#define L3_SIZE [TODO]
+#define L1_SIZE (32 * 1024)
+#define L2_SIZE (1024 * 1024)
+#define L3_SIZE (11 * 1024 * 1024)
  
 int main (int ac, char **av) {
 
@@ -31,7 +31,7 @@ int main (int ac, char **av) {
 
     // [1.2] TODO: Uncomment the following line to allocate a buffer of a size
     // of your chosing. This will help you measure the latencies at L2 and L3.
-    //uint64_t *eviction_buffer = (uint64_t)malloc(TODO);
+    uint64_t *eviction_buffer = (uint64_t *)malloc(L3_SIZE * 2);
 
     // Example: Measure L1 access latency, store results in l1_latency array
     for (int i=0; i<SAMPLES; i++){
@@ -46,17 +46,48 @@ int main (int ac, char **av) {
     // [1.2] TODO: Measure DRAM Latency, store results in dram_latency array
     // ======
     //
+    for (int i=0; i<SAMPLES; i++) {
+        // Step 1: Flush the line from all caches
+        clflush((void*)target_buffer);
+
+        // Step 2: Measure the access latency (it will miss all caches and go to DRAM)
+        dram_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // ======
     // [1.2] TODO: Measure L2 Latency, store results in l2_latency array
     // ======
     //
+    for (int i=0; i<SAMPLES; i++) {
+        // Step 1: Bring target into L1 (and L2)
+        tmp = target_buffer[0];
 
+        // Step 2: Evict from L1 by accessing a buffer size of L1_SIZE
+        // We stride by 64 bytes (cache line size) to touch every set
+        for (int j = 0; j < L1_SIZE / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
+             tmp = eviction_buffer[j];
+        }
+
+        // Step 3: Measure access (should miss L1, hit L2)
+        l2_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
     // ======
     // [1.2] TODO: Measure L3 Latency, store results in l3_latency array
     // ======
     //
+    for (int i=0; i<SAMPLES; i++) {
+        // Step 1: Bring target into L1/L2/L3
+        tmp = target_buffer[0];
 
+        // Step 2: Evict from L2 by accessing a buffer size of L2_SIZE
+        // (This naturally evicts L1 as well)
+        for (int j = 0; j < L2_SIZE / sizeof(uint64_t); j += 64/sizeof(uint64_t)) {
+             tmp = eviction_buffer[j];
+        }
+
+        // Step 3: Measure access (should miss L1/L2, hit L3)
+        l3_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // Print the results to the screen
     // [1.5] Change print_results to print_results_for_python so that your code will work
@@ -66,7 +97,7 @@ int main (int ac, char **av) {
     free(target_buffer);
 
     // [1.2] TODO: Uncomment this line once you uncomment the eviction_buffer creation line
-    //free(eviction_buffer);
+    free(eviction_buffer);
     return 0;
 }
 
