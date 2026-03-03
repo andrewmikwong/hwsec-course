@@ -1,19 +1,6 @@
 #include "util.h"
 #include <sys/mman.h>
 
-// Simple pseudo-random shuffle for receiver
-void shuffle(int *array, size_t n) {
-    if (n > 1) {
-        size_t i;
-        for (i = 0; i < n - 1; i++) {
-            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
-            int t = array[j];
-            array[j] = array[i];
-            array[i] = t;
-        }
-    }
-}
-
 int main(int argc, char **argv)
 {
 	// Allocate huge page
@@ -26,10 +13,6 @@ int main(int argc, char **argv)
 
 	// Initialize buffer
 	memset(buf, 1, BUFF_SIZE);
-
-	// Create an array of indices for random access
-	int indices[WAY_COUNT];
-	for(int i=0; i<WAY_COUNT; i++) indices[i] = i;
 
 	printf("Please press enter.\n");
 
@@ -44,60 +27,46 @@ int main(int argc, char **argv)
 
 	bool listening = true;
 	while (listening) {
-		// 1. PRIME (Forward)
-		while (get_time() < start) {}
-		for (int w = 0; w < WAY_COUNT; w++) {
-			volatile char *p = (char *)buf + (indices[w] * STRIDE);
-			*p;
-		}
-
-		// 2. WAIT (Wait for 50% of slot)
-		while (get_time() < start + (SLOT_TIME / 2)) {}
-
-		// 3. PROBE (Backward to avoid self-eviction and confuse prefetcher)
-		uint64_t t1 = get_time();
-		for (int w = WAY_COUNT - 1; w >= 0; w--) {
-			volatile char *p = (char *)buf + (indices[w] * STRIDE);
-			*p; 
-		}
-		uint64_t t2 = get_time();
-		uint64_t total_time = t2 - t1;
+        // --- DEBUG: USE CLFLUSH TO SIMULATE EVICTION ---
+        // Instead of Prime+Probe, we will just flush the line and time it.
+        // This confirms if we can see ANY signal at all.
+        
+        // 1. Flush the line (Simulate "Prime" by removing it)
+        clflush((ADDR_PTR)buf);
+        
+        // 2. Wait for Sender
+        while (get_time() < start + (SLOT_TIME / 2)) {}
+        
+        // 3. Measure Reload Time
+        CYCLES time = measure_one_block_access_time((ADDR_PTR)buf);
 
 		// 4. DECIDE
-		// Threshold: 750 cycles
-		int bit = (total_time > 750) ? 1 : 0;
-		
-        // DEBUG: Print time to calibrate threshold
-        // if (total_time > 400) printf("Time: %lu\n", total_time);
+		// If time is LOW (< 100), it means Sender ACCESSED it (brought it back to cache).
+        // If time is HIGH (> 200), it means Sender did NOTHING (it stayed flushed).
+        // Note: This logic is INVERTED compared to Prime+Probe!
+        // Fast = Sender Active (1)
+        // Slow = Sender Idle (0)
         
+		int bit = (time < 200) ? 1 : 0;
+		
 		if (bit == 1) {
 			// Detected Start Bit!
 			start += SLOT_TIME;
 			int received_val = 0;
 
 			for (int i = 0; i < 1; i++) { // ONLY 1 BIT
-				// PRIME (Forward)
-				while (get_time() < start) {}
-				for (int w = 0; w < WAY_COUNT; w++) {
-					volatile char *p = (char *)buf + (indices[w] * STRIDE);
-					*p;
-				}
-
-				// WAIT
+                // Flush
+                clflush((ADDR_PTR)buf);
+                
+                // Wait
 				while (get_time() < start + (SLOT_TIME / 2)) {}
 
-				// PROBE (Backward)
-				t1 = get_time();
-				for (int w = WAY_COUNT - 1; w >= 0; w--) {
-					volatile char *p = (char *)buf + (indices[w] * STRIDE);
-					*p; 
-				}
-				t2 = get_time();
-				total_time = t2 - t1;
-
-				int data_bit = (total_time > 750) ? 1 : 0;
+                // Measure
+                time = measure_one_block_access_time((ADDR_PTR)buf);
+                
+				int data_bit = (time < 200) ? 1 : 0;
 				received_val |= (data_bit << i);
-                printf("Bit %d: Time %lu -> %d\n", i, total_time, data_bit);
+                printf("Bit %d: Time %u -> %d\n", i, time, data_bit);
 
 				start += SLOT_TIME;
 			}
