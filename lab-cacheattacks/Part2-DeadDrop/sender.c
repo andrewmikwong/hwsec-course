@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   int indices[WAY_COUNT];
   for(int i=0; i<WAY_COUNT; i++) indices[i] = i;
 
-  printf("Please type a message (integer 0-255).\n");
+  printf("Please type a message (integer 0 or 1).\n");
 
   bool sending = true;
   while (sending) {
@@ -48,8 +48,8 @@ int main(int argc, char **argv)
       uint64_t start = get_time();
       start = (start / SLOT_TIME + 10) * SLOT_TIME; 
 
-      // Send 9 bits: Start Bit (1) + 8 Data Bits
-      for (int i = -1; i < 8; i++) {
+      // Send 2 bits: Start Bit (1) + 1 Data Bit
+      for (int i = -1; i < 1; i++) { // ONLY 1 BIT
           int bit;
           if (i == -1) bit = 1; // Start Bit
           else bit = (secret >> i) & 1;
@@ -61,10 +61,6 @@ int main(int argc, char **argv)
               // Use randomized access pattern to confuse prefetcher
               uint64_t end_hammer = start + (SLOT_TIME * 9 / 10);
               while (get_time() < end_hammer) {
-                  // Shuffle indices every few iterations to keep it random
-                  // (Doing it every time might be too slow, so we do it once per bit or just use a fixed random permutation)
-                  // For simplicity, let's just use a fixed "random-ish" stride or simple reverse
-                  
                   // Forward pass
                   for (int k = 0; k < WAY_COUNT; k++) {
                       volatile char *p = (char *)buf + (indices[k] * STRIDE);
