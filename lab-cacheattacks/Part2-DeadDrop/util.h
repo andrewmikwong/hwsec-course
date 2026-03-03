@@ -22,7 +22,7 @@
 // Prime+Probe Constants
 #define BUFF_SIZE (1<<21)
 #define STRIDE (64 * 1024)
-#define WAY_COUNT 12
+#define WAY_COUNT 20
 #define SLOT_TIME 100000
 
 static inline uint64_t get_time() {
