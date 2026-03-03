@@ -1,11 +1,5 @@
-
-#include"util.h"
-// mman library to be used for hugepage allocations (e.g. mmap or posix_memalign only)
+#include "util.h"
 #include <sys/mman.h>
-
-// TODO: define your own buffer size
-#define BUFF_SIZE (1<<21)
-//#define BUFF_SIZE [TODO]
 
 int main(int argc, char **argv)
 {
@@ -17,29 +11,56 @@ int main(int argc, char **argv)
      perror("mmap() error\n");
      exit(EXIT_FAILURE);
   }
-  // The first access to a page triggers overhead associated with
-  // page allocation, TLB insertion, etc.
-  // Thus, we use a dummy write here to trigger page allocation
-  // so later access will not suffer from such overhead.
-  //*((char *)buf) = 1; // dummy write to trigger page allocation
 
+  // Initialize buffer to ensure allocation
+  memset(buf, 1, BUFF_SIZE);
 
-  // TODO:
-  // Put your covert channel setup code here
-
-  printf("Please type a message.\n");
+  printf("Please type a message (integer 0-255).\n");
 
   bool sending = true;
   while (sending) {
       char text_buf[128];
-      fgets(text_buf, sizeof(text_buf), stdin);
+      if (fgets(text_buf, sizeof(text_buf), stdin) == NULL) {
+          sending = false;
+          continue;
+      }
 
-      // TODO:
-      // Put your covert channel code here
+      int secret = atoi(text_buf);
+      printf("Sending %d...\n", secret);
+
+      // Synchronize start
+      uint64_t start = get_time();
+      // Align to next large boundary to sync with receiver
+      start = (start / SLOT_TIME + 10) * SLOT_TIME; 
+
+      // Send 8 bits
+      for (int i = 0; i < 8; i++) {
+          int bit = (secret >> i) & 1;
+          
+          // Wait for the start of the slot
+          while (get_time() < start) {}
+          
+          if (bit) {
+              // Send '1': Hammer the eviction set to evict receiver
+              // We access WAY_COUNT lines at STRIDE intervals
+              // This targets the specific cache set determined by offset 0
+              uint64_t end_hammer = start + (SLOT_TIME / 2);
+              while (get_time() < end_hammer) {
+                  for (int w = 0; w < WAY_COUNT; w++) {
+                      // Access memory
+                      volatile char *p = (char *)buf + (w * STRIDE);
+                      *p; 
+                  }
+              }
+          } else {
+              // Send '0': Do nothing (idle)
+          }
+          
+          start += SLOT_TIME;
+      }
+      printf("Sent: %d\n", secret);
   }
 
   printf("Sender finished.\n");
   return 0;
 }
-
-
