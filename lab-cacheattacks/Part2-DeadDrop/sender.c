@@ -1,19 +1,6 @@
 #include "util.h"
 #include <sys/mman.h>
 
-// Simple pseudo-random shuffle for sender
-void shuffle(int *array, size_t n) {
-    if (n > 1) {
-        size_t i;
-        for (i = 0; i < n - 1; i++) {
-            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
-            int t = array[j];
-            array[j] = array[i];
-            array[i] = t;
-        }
-    }
-}
-
 int main(int argc, char **argv)
 {
   // Allocate a buffer using huge page
@@ -26,10 +13,6 @@ int main(int argc, char **argv)
 
   // Initialize buffer
   memset(buf, 1, BUFF_SIZE);
-
-  // Create an array of indices for random access
-  int indices[WAY_COUNT];
-  for(int i=0; i<WAY_COUNT; i++) indices[i] = i;
 
   printf("Please type a message (integer 0 or 1).\n");
 
@@ -57,20 +40,14 @@ int main(int argc, char **argv)
           while (get_time() < start) {}
           
           if (bit) {
-              // Send '1': Hammer the eviction set
-              // Use randomized access pattern to confuse prefetcher
+              // Send '1': ACCESS THE MEMORY
+              // This is Flush+Reload style: Victim accesses the line.
+              // We just need to touch it once to bring it into cache.
+              // But let's hammer it a bit to be sure.
               uint64_t end_hammer = start + (SLOT_TIME * 9 / 10);
               while (get_time() < end_hammer) {
-                  // Forward pass
-                  for (int k = 0; k < WAY_COUNT; k++) {
-                      volatile char *p = (char *)buf + (indices[k] * STRIDE);
-                      *p; 
-                  }
-                  // Backward pass
-                  for (int k = WAY_COUNT - 1; k >= 0; k--) {
-                      volatile char *p = (char *)buf + (indices[k] * STRIDE);
-                      *p; 
-                  }
+                  volatile char *p = (char *)buf;
+                  *p; // Just read the first byte
               }
           } else {
               // Send '0': Idle
