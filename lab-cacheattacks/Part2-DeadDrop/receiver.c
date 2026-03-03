@@ -67,12 +67,15 @@ int main(int argc, char **argv)
 		// Threshold: 750 cycles
 		int bit = (total_time > 750) ? 1 : 0;
 		
+        // DEBUG: Print time to calibrate threshold
+        // if (total_time > 400) printf("Time: %lu\n", total_time);
+        
 		if (bit == 1) {
 			// Detected Start Bit!
 			start += SLOT_TIME;
 			int received_val = 0;
 
-			for (int i = 0; i < 8; i++) {
+			for (int i = 0; i < 1; i++) { // ONLY 1 BIT
 				// PRIME (Forward)
 				while (get_time() < start) {}
 				for (int w = 0; w < WAY_COUNT; w++) {
@@ -94,6 +97,7 @@ int main(int argc, char **argv)
 
 				int data_bit = (total_time > 750) ? 1 : 0;
 				received_val |= (data_bit << i);
+                printf("Bit %d: Time %lu -> %d\n", i, total_time, data_bit);
 
 				start += SLOT_TIME;
 			}
