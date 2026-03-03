@@ -2,8 +2,6 @@
 #include <sys/mman.h>
 
 // L2 Configuration
-// Receiver MUST use < 16 ways to avoid self-eviction!
-// 12 ways is safe and covers 75% of the set.
 #define L2_WAYS_RECEIVER 12 
 #define L2_STRIDE 65536
 #define CACHE_LINE_SIZE 64
@@ -24,7 +22,7 @@ int main(int argc, char **argv)
     char text_buf[2];
     fgets(text_buf, sizeof(text_buf), stdin);
 
-    printf("Receiver now listening (Mastik-Style Pointer Chasing)...\n");
+    printf("Receiver now listening (Threshold 200)...\n");
 
     while (1) {
         for (int set = 0; set < 256; set++) {
@@ -47,7 +45,6 @@ int main(int argc, char **argv)
             
             for (int k = 0; k < required_confidence; k++) {
                 // 1. PRIME
-                // Traverse the list to load it into L2
                 void **p = start_node;
                 for (int i = 0; i < L2_WAYS_RECEIVER; i++) {
                     p = (void **)*p;
@@ -59,7 +56,6 @@ int main(int argc, char **argv)
                 while (get_time() < wait_start + 2000) {}
 
                 // 3. PROBE
-                // Traverse and measure
                 uint64_t t1 = get_time();
                 p = start_node;
                 for (int i = 0; i < L2_WAYS_RECEIVER; i++) {
@@ -69,10 +65,10 @@ int main(int argc, char **argv)
                 uint64_t total_time = t2 - t1;
 
                 // 4. THRESHOLD
-                // 12 ways * 40 cycles (L2) = 480 cycles
-                // 12 ways * DRAM (>200) = > 2400 cycles
-                // Threshold: 800 is a safe middle ground.
-                if (total_time > 800) {
+                // If we are hitting L1, time is ~50.
+                // If we are hitting DRAM, time is >2000.
+                // Threshold 200 is extremely safe if we are actually evicting.
+                if (total_time > 200) {
                     confidence++;
                 } else {
                     confidence = 0;
