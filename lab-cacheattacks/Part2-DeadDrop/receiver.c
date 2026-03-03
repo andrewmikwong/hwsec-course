@@ -6,6 +6,14 @@
 #define L2_STRIDE 65536
 #define CACHE_LINE_SIZE 64
 
+// Serializing timer
+static inline uint64_t get_time_serializing() {
+    uint64_t a, d;
+    unsigned int aux;
+    asm volatile("rdtscp" : "=a"(a), "=d"(d), "=c"(aux) : : "memory");
+    return (d << 32) | a;
+}
+
 int main(int argc, char **argv)
 {
     // Allocate Huge Page
@@ -18,11 +26,15 @@ int main(int argc, char **argv)
     }
     memset(buf, 1, BUFF_SIZE);
 
-    printf("Please press enter.\n");
-    char text_buf[2];
-    fgets(text_buf, sizeof(text_buf), stdin);
+    // Handshake
+    printf("READY\n");
+    fflush(stdout);
+    
+    char text_buf[128];
+    if (fgets(text_buf, sizeof(text_buf), stdin) == NULL) return 0;
 
-    printf("Receiver now listening (Threshold 200)...\n");
+    printf("LISTENING\n");
+    fflush(stdout);
 
     while (1) {
         for (int set = 0; set < 256; set++) {
@@ -52,23 +64,20 @@ int main(int argc, char **argv)
 
                 // 2. WAIT
                 // Wait for sender (2000 cycles)
-                uint64_t wait_start = get_time();
-                while (get_time() < wait_start + 2000) {}
+                uint64_t wait_start = get_time_serializing();
+                while (get_time_serializing() < wait_start + 2000) {}
 
                 // 3. PROBE
-                uint64_t t1 = get_time();
+                uint64_t t1 = get_time_serializing();
                 p = start_node;
                 for (int i = 0; i < L2_WAYS_RECEIVER; i++) {
                     p = (void **)*p;
                 }
-                uint64_t t2 = get_time();
+                uint64_t t2 = get_time_serializing();
                 uint64_t total_time = t2 - t1;
 
                 // 4. THRESHOLD
-                // If we are hitting L1, time is ~50.
-                // If we are hitting DRAM, time is >2000.
-                // Threshold 200 is extremely safe if we are actually evicting.
-                if (total_time > 200) {
+                if (total_time > 800) {
                     confidence++;
                 } else {
                     confidence = 0;
@@ -79,7 +88,7 @@ int main(int argc, char **argv)
             if (confidence == required_confidence) {
                 printf("Received value: %d\n", set);
                 fflush(stdout);
-                sleep(1);
+                // sleep(1); // Removed sleep for faster tuning
             }
         }
     }
