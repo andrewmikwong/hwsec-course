@@ -120,6 +120,12 @@ int main(int argc, char **argv)
       // 1,000,000 iterations to compensate for stricter receiver
       long duration = 1000000; 
       
+      // Sync Pulse: Send Set 8 ONLY for a short burst to wake up receiver
+      long sync_duration = 50000;
+      for (long k = 0; k < sync_duration; k++) {
+          evict_set(8);
+      }
+
       for (long k = 0; k < duration; k++) {
           // 1. Evict Valid Bit (Set 8)
           evict_set(8);
