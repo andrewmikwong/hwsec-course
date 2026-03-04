@@ -119,7 +119,7 @@ int main(int argc, char **argv)
         // INVERTED LOGIC based on observed behavior (Power/Wake-up Latency Channel)
         // Sender ON -> Keeps core awake -> Low Latency (< Threshold) -> Bit 1
         // Sender OFF -> Core sleeps -> High Latency (> Threshold) -> Bit 0
-        int bit = (avg_time < threshold) ? 1 : 0;
+        int bit = (avg_time < threshold) ? 0 : 1;
         
         // Print raw bit for debugging
         printf("%d", bit);
