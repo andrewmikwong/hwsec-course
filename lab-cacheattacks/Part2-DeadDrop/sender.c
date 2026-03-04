@@ -9,7 +9,9 @@
 #define L2_WAYS 16
 // Stride to reach the same set index in the next "color" of the huge page
 // 64KB stride
+#ifndef STRIDE
 #define STRIDE (1<<16)
+#endif
 
 void *buf;
 

@@ -1,7 +1,7 @@
 include ../cpu.mk
 
 TARGETS=receiver sender test_unit test_eviction
-UTILS=util.o lib_covert.o
+UTILS=util.o
 
 all: $(TARGETS)
 

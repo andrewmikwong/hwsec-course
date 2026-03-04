@@ -6,7 +6,9 @@
 
 #define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
+#ifndef STRIDE
 #define STRIDE (1<<16)
+#endif
 
 // Threshold for L2 miss vs hit
 // L2 hit ~14 cycles

@@ -5,7 +5,9 @@
 
 #define BUFF_SIZE (1<<21) // 2MB
 #define L2_WAYS 16
+#ifndef STRIDE
 #define STRIDE (1<<16) // 64KB
+#endif
 
 int main() {
     // Allocate huge page
