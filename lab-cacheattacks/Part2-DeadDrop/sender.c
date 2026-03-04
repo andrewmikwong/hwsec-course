@@ -1,22 +1,14 @@
-#include "util.h"
-#include <sys/mman.h>
+#include "lib_covert.h"
+#include "util.h" // Keep for legacy compatibility if needed
+#include <stdio.h>
+#include <stdlib.h>
 
-// L2 Configuration
-#define L2_WAYS_SENDER 32   // NUCLEAR OPTION: 32 ways (2x cache size)
-#define L2_STRIDE 65536     // 64KB
-#define CACHE_LINE_SIZE 64
+#define L2_WAYS_SENDER 32
 
 int main(int argc, char **argv)
 {
-    // Allocate Huge Page
-    void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, 
-                    MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
-    
-    if (buf == MAP_FAILED) {
-        perror("mmap");
-        exit(EXIT_FAILURE);
-    }
-    memset(buf, 1, BUFF_SIZE);
+    void *buf = allocate_huge_page();
+    if (!buf) return 1;
 
     printf("Please type a message (integer 0-255).\n");
 
@@ -26,40 +18,14 @@ int main(int argc, char **argv)
         int secret = atoi(text_buf);
         if (secret < 0 || secret > 255) continue;
 
-        printf("Sending %d... (Hammering 32 Ways)\n", secret);
+        printf("Sending %d...\n", secret);
 
-        // --- SETUP POINTERS ---
-        void **pointers[L2_WAYS_SENDER];
-        for (int w = 0; w < L2_WAYS_SENDER; w++) {
-            uint64_t offset = (w * L2_STRIDE) + (secret * CACHE_LINE_SIZE);
-            pointers[w] = (void **)((char *)buf + offset);
-        }
+        // Setup eviction set for the secret
+        void **start_node = setup_eviction_set(buf, secret, L2_WAYS_SENDER);
 
-        // Link them up circular
-        for (int w = 0; w < L2_WAYS_SENDER; w++) {
-            *pointers[w] = pointers[(w + 1) % L2_WAYS_SENDER];
-        }
-
-        // --- ATTACK LOOP ---
-        void **p = pointers[0];
+        // Hammer for ~2 seconds (approx 4B cycles)
+        hammer_set(start_node, L2_WAYS_SENDER, 4000000000ULL);
         
-        // Run for ~2 seconds
-        uint64_t start = get_time();
-        while (get_time() < start + 4000000000ULL) {
-            // Unroll loop for speed
-            // We WRITE to the pointer to force Modified state
-            // (Note: *p = next_ptr is essentially what we are doing, but let's be explicit)
-            // Actually, just reading is usually enough if we have enough ways.
-            // But let's stick to the read traversal which is fast.
-            p = (void **)*p;
-            p = (void **)*p;
-            p = (void **)*p;
-            p = (void **)*p;
-            p = (void **)*p;
-            p = (void **)*p;
-            p = (void **)*p;
-            p = (void **)*p;
-        }
         printf("Sent.\n");
     }
 
