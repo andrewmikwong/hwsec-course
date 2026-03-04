@@ -11,12 +11,6 @@
 #define STRIDE (1<<16)
 #endif
 
-// Threshold for L2 miss vs hit (16 accesses)
-// Observed Hit: ~1100 cycles
-// Observed Miss: ~2350 cycles
-// Midpoint: ~1700
-#define THRESHOLD 1700
-
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
     uint32_t lo, hi;
@@ -32,6 +26,7 @@ struct node {
 
 void *buf;
 struct node *sets[256]; // Pointers to the start of each set's list
+uint64_t thresholds[256]; // Per-set thresholds
 
 // Shuffle an array of pointers
 void shuffle(struct node **array, int n) {
@@ -81,6 +76,23 @@ uint64_t probe_set(int set_index) {
     return end - start;
 }
 
+// Calibrate thresholds
+void calibrate() {
+    printf("Calibrating thresholds...\n");
+    for (int i = 0; i <= 8; i++) {
+        uint64_t sum = 0;
+        int samples = 1000;
+        for (int k = 0; k < samples; k++) {
+            prime_set(i);
+            // No wait
+            sum += probe_set(i);
+        }
+        uint64_t avg_hit = sum / samples;
+        thresholds[i] = avg_hit * 3 / 2;
+        printf("Set %d: Avg Hit = %llu, Threshold = %llu\n", i, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
+    }
+}
+
 int main(int argc, char **argv)
 {
     srand(time(NULL));
@@ -99,6 +111,8 @@ int main(int argc, char **argv)
     for (int i = 0; i <= 8; i++) {
         build_set(i);
     }
+
+    calibrate();
 
     printf("Please press enter.\n");
     char text_buf[2];
@@ -123,14 +137,14 @@ int main(int argc, char **argv)
         // Check Valid Bit (Set 8) first
         uint64_t t8 = probe_set(8);
         
-        if (t8 > THRESHOLD) {
+        if (t8 > thresholds[8]) {
             // Valid signal detected! (Set 8 was evicted)
             int received_byte = 0;
             
             // Decode bits 0-7
             for (int i = 0; i < 8; i++) {
                 uint64_t t = probe_set(i);
-                if (t > THRESHOLD) {
+                if (t > thresholds[i]) {
                     received_byte |= (1 << i);
                 }
             }
@@ -145,14 +159,10 @@ int main(int argc, char **argv)
             
             if (consecutive_reads == 50) { // Stable for 50 iterations
                 printf("%d\n", received_byte);
-                // Reset to avoid printing again immediately? 
-                // No, we might want to print again if the sender sends again.
-                // But the sender holds for 200000 iterations.
-                // We will see it many times.
-                // We should wait until it changes or disappears to print again.
-                // For now, let's just print. The requirement is to print the message.
-                // The example output shows "47" once.
-                // So we should suppress duplicates until the signal drops.
+                // We print once per stable detection.
+                // To allow re-printing if the sender sends again (after a pause),
+                // we need to detect the "pause" (Set 8 valid dropping).
+                // That happens in the 'else' block below.
             }
         } else {
             // No valid signal
