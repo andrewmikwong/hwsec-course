@@ -12,8 +12,9 @@
 #define STRIDE (1<<16)
 #endif
 
-// Spacing between sets to avoid adjacent line prefetcher (Spatial Prefetcher)
+// Revert to the configuration that worked (Spacing 16, Base 0)
 #define SET_SPACING 16
+#define BASE_SET 0
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
@@ -47,8 +48,8 @@ void build_set(int logical_set_index) {
     char *base = (char *)buf;
     struct node *nodes[L2_WAYS];
     
-    // Map logical set index to physical set index with spacing
-    int physical_set_index = logical_set_index * SET_SPACING;
+    // Map logical set index to physical set index with spacing and offset
+    int physical_set_index = BASE_SET + (logical_set_index * SET_SPACING);
     
     for (int i = 0; i < L2_WAYS; i++) {
         nodes[i] = (struct node *)(base + physical_set_index * 64 + i * STRIDE);
@@ -116,7 +117,7 @@ int main(int argc, char **argv)
 
       // Send the message for a duration
       // We use a simple loop count to hold the signal
-      // Increased duration to 1,000,000 to compensate for stricter receiver
+      // 1,000,000 iterations to compensate for stricter receiver
       long duration = 1000000; 
       
       for (long k = 0; k < duration; k++) {

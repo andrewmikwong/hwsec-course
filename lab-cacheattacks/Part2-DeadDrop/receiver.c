@@ -12,10 +12,9 @@
 #define STRIDE (1<<16)
 #endif
 
-// Revert to Spacing 16 (1KB) as it was working better.
-// Shift Base to 64 to avoid the noisy lower sets (0-32) that caused issues.
+// Revert to the configuration that worked (Spacing 16, Base 0)
 #define SET_SPACING 16
-#define BASE_SET 64
+#define BASE_SET 0
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
@@ -100,8 +99,8 @@ void calibrate(uint64_t manual_threshold) {
                 sum += probe_set(i);
             }
             uint64_t avg_hit = sum / samples;
-            // 2.0x is a safe conservative threshold
-            thresholds[i] = avg_hit * 2; 
+            // Lower threshold slightly to 1.8x to catch signals that were missed
+            thresholds[i] = avg_hit * 18 / 10; 
             printf("Set %d (Phys %d): Avg Hit = %llu, Threshold = %llu\n", 
                    i, BASE_SET + (i * SET_SPACING), (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
         }
