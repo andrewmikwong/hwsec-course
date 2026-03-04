@@ -1,18 +1,34 @@
 include ../cpu.mk
 
-TARGETS=receiver sender 
-UTILS=util.o 
+TARGETS=receiver sender test_eviction
+UTILS=util.o
 
 all: $(TARGETS)
 
-$(UTILS): %.o: %.c %.h
+# Compile library
+lib_covert.o: lib_covert.c lib_covert.h
+	$(CC) $(CFLAGS) -c lib_covert.c
+
+# Compile legacy util
+util.o: util.c util.h
+	$(CC) $(CFLAGS) -c util.c
+
+# Compile Targets
+sender: sender.o $(UTILS)
+	$(CC) $(CFLAGS) sender.o $(UTILS) -o sender
+
+receiver: receiver.o $(UTILS)
+	$(CC) $(CFLAGS) receiver.o $(UTILS) -o receiver
+
+test_eviction: test_eviction.o $(UTILS)
+	$(CC) $(CFLAGS) test_eviction.o $(UTILS) -o test_eviction
+
+run_test_eviction: test_eviction
+	taskset -c $(SENDER_CPU) ./test_eviction
+
+# Object files
+%.o: %.c
 	$(CC) $(CFLAGS) -c $<
-
-%.o: %.c util.h
-	$(CC) $(CFLAGS)  -c $< 
-
-$(TARGETS): %:%.o util.o
-	$(CC) $(CFLAGS) $^ -o $@
 
 run_sender: sender 
 	taskset -c $(SENDER_CPU) ./sender
@@ -20,7 +36,9 @@ run_sender: sender
 run_receiver: receiver
 	taskset -c $(RECEIVER_CPU) ./receiver
 
-.PHONY:	clean
+run_tests: test_unit
+	./test_unit
 
+.PHONY:	clean
 clean:
-	$(RM) *.o $(HELPERS) $(TARGETS) 
+	$(RM) *.o $(TARGETS)
