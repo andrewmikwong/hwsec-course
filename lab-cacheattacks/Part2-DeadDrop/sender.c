@@ -19,6 +19,7 @@ int main(int argc, char **argv)
         if (secret < 0 || secret > 255) continue;
 
         printf("Sending %d...\n", secret);
+        fflush(stdout); // FLUSH HERE to ensure python sees it
 
         // Setup eviction set for the secret
         void **start_node = setup_eviction_set(buf, secret, L2_WAYS_SENDER);
@@ -27,6 +28,7 @@ int main(int argc, char **argv)
         hammer_set(start_node, L2_WAYS_SENDER, 4000000000ULL);
         
         printf("Sent.\n");
+        fflush(stdout); // FLUSH HERE
     }
 
     return 0;
