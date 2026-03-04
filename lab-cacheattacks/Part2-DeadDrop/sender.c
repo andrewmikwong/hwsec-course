@@ -45,7 +45,7 @@ void build_set(int set_index) {
     for (int i = 0; i < L2_WAYS - 1; i++) {
         nodes[i]->next = nodes[i+1];
     }
-    nodes[L2_WAYS-1]->next = NULL;
+    nodes[L2_WAYS-1]->next = NULL; // Terminate
     
     sets[set_index] = nodes[0];
 }
@@ -53,6 +53,11 @@ void build_set(int set_index) {
 // Evict a specific L2 set by traversing the list
 void evict_set(int set_index) {
     struct node *curr = sets[set_index];
+    while (curr) {
+        curr = curr->next;
+    }
+    // Traverse again to be sure (aggressive eviction)
+    curr = sets[set_index];
     while (curr) {
         curr = curr->next;
     }
