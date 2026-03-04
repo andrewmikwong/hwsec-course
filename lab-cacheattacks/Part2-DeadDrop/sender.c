@@ -3,31 +3,65 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 
 // 2MB Huge Page
 #define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
-// Stride to reach the same set index in the next "color" of the huge page
-// 64KB stride
 #ifndef STRIDE
 #define STRIDE (1<<16)
 #endif
 
-void *buf;
+// Linked list node
+struct node {
+    struct node *next;
+    char pad[64 - sizeof(struct node *)]; // Pad to cache line size
+};
 
-// Evict a specific L2 set by accessing congruent addresses
-void evict_set(int set_index) {
+void *buf;
+struct node *sets[256]; // Pointers to the start of each set's list
+
+// Shuffle an array of pointers
+void shuffle(struct node **array, int n) {
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        struct node *temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+}
+
+// Build shuffled linked list for a set
+void build_set(int set_index) {
     char *base = (char *)buf;
-    volatile char *addr;
-    // Access 16 addresses that map to the same set
+    struct node *nodes[L2_WAYS];
+    
     for (int i = 0; i < L2_WAYS; i++) {
-        addr = base + set_index * 64 + i * STRIDE;
-        *addr; // Read access
+        nodes[i] = (struct node *)(base + set_index * 64 + i * STRIDE);
+    }
+    
+    shuffle(nodes, L2_WAYS);
+    
+    for (int i = 0; i < L2_WAYS - 1; i++) {
+        nodes[i]->next = nodes[i+1];
+    }
+    nodes[L2_WAYS-1]->next = NULL;
+    
+    sets[set_index] = nodes[0];
+}
+
+// Evict a specific L2 set by traversing the list
+void evict_set(int set_index) {
+    struct node *curr = sets[set_index];
+    while (curr) {
+        curr = curr->next;
     }
 }
 
 int main(int argc, char **argv)
 {
+  srand(time(NULL));
+
   // Allocate a buffer using huge page
   buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
   
@@ -37,6 +71,11 @@ int main(int argc, char **argv)
   }
   
   *((char *)buf) = 1; // dummy write to trigger page allocation
+
+  // Build sets 0-8
+  for (int i = 0; i <= 8; i++) {
+      build_set(i);
+  }
 
   printf("Please type a message.\n");
 

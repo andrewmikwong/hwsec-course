@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <sys/mman.h>
+#include <time.h>
 #include "util.h"
 
 #define BUFF_SIZE (1<<21) // 2MB
@@ -9,7 +11,32 @@
 #define STRIDE (1<<16) // 64KB
 #endif
 
+// Inline rdtscp for timing
+static inline uint64_t rdtscp(void) {
+    uint32_t lo, hi;
+    asm volatile("rdtscp" : "=a"(lo), "=d"(hi) :: "rcx");
+    return ((uint64_t)hi << 32) | lo;
+}
+
+// Linked list node
+struct node {
+    struct node *next;
+    char pad[64 - sizeof(struct node *)]; // Pad to cache line size
+};
+
+// Shuffle an array of pointers
+void shuffle(struct node **array, int n) {
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        struct node *temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+}
+
 int main() {
+    srand(time(NULL));
+
     // Allocate huge page
     void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, 
                      MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
@@ -19,46 +46,77 @@ int main() {
         exit(EXIT_FAILURE);
     }
     
-    // Dummy write to trigger allocation
+    // Dummy write
     *((char *)buf) = 1;
 
     char *base = (char *)buf;
-    int set_index = 0; // Target Set 0
+    int set_index = 0;
     
-    // Addresses for Set 0
-    // We have 32 addresses for Set 0 in a 2MB page (2MB / 64KB = 32)
-    // Use first 16 as "victim" set, next 16 as "attacker" set
-    
-    volatile char *victim_set[L2_WAYS];
-    volatile char *attacker_set[L2_WAYS];
-    
-    printf("Constructing sets for Set Index %d...\n", set_index);
+    // Construct Victim List (Set 0, first 16 colors)
+    struct node *victim_nodes[L2_WAYS];
     for (int i = 0; i < L2_WAYS; i++) {
-        victim_set[i] = base + set_index * 64 + i * STRIDE;
-        attacker_set[i] = base + set_index * 64 + (i + L2_WAYS) * STRIDE;
+        victim_nodes[i] = (struct node *)(base + set_index * 64 + i * STRIDE);
+    }
+    shuffle(victim_nodes, L2_WAYS);
+    
+    struct node *victim_list = victim_nodes[0];
+    for (int i = 0; i < L2_WAYS - 1; i++) {
+        victim_nodes[i]->next = victim_nodes[i+1];
+    }
+    victim_nodes[L2_WAYS-1]->next = NULL;
+
+    // Construct Attacker List (Set 0, next 16 colors)
+    struct node *attacker_nodes[L2_WAYS];
+    for (int i = 0; i < L2_WAYS; i++) {
+        attacker_nodes[i] = (struct node *)(base + set_index * 64 + (i + L2_WAYS) * STRIDE);
+    }
+    shuffle(attacker_nodes, L2_WAYS);
+    
+    struct node *attacker_list = attacker_nodes[0];
+    for (int i = 0; i < L2_WAYS - 1; i++) {
+        attacker_nodes[i]->next = attacker_nodes[i+1];
+    }
+    attacker_nodes[L2_WAYS-1]->next = NULL;
+
+    // 1. Prime Victim Set (Traverse list)
+    struct node *curr;
+    for (int k = 0; k < 3; k++) {
+        curr = victim_list;
+        while (curr) {
+            curr = curr->next;
+        }
     }
 
-    // 1. Prime (Victim accesses their set)
-    printf("Priming victim set...\n");
-    for (int i = 0; i < L2_WAYS; i++) {
-        *victim_set[i]; // Read access
+    // 2. Measure Victim Set (Hit)
+    uint64_t start = rdtscp();
+    curr = victim_list;
+    while (curr) {
+        curr = curr->next;
     }
-    
-    // 2. Probe (Measure latency of one victim line - should be fast/hit)
-    CYCLES time_hit = measure_one_block_access_time((ADDR_PTR)victim_set[0]);
-    printf("Victim probe (Hit): %u cycles\n", time_hit);
+    uint64_t end = rdtscp();
+    uint64_t time_hit = end - start;
+    printf("Victim Set Probe (Hit): %llu cycles (Avg per line: %llu)\n", time_hit, time_hit / L2_WAYS);
 
     // 3. Evict (Attacker accesses their set)
-    printf("Attacker evicting...\n");
-    for (int i = 0; i < L2_WAYS; i++) {
-        *attacker_set[i]; // Read access
+    // Traverse attacker list multiple times to ensure eviction
+    for (int k = 0; k < 3; k++) {
+        curr = attacker_list;
+        while (curr) {
+            curr = curr->next;
+        }
     }
 
-    // 4. Probe again (Measure latency of victim line - should be slow/miss)
-    CYCLES time_miss = measure_one_block_access_time((ADDR_PTR)victim_set[0]);
-    printf("Victim probe (Miss): %u cycles\n", time_miss);
+    // 4. Measure Victim Set (Miss)
+    start = rdtscp();
+    curr = victim_list;
+    while (curr) {
+        curr = curr->next;
+    }
+    end = rdtscp();
+    uint64_t time_miss = end - start;
+    printf("Victim Set Probe (Miss): %llu cycles (Avg per line: %llu)\n", time_miss, time_miss / L2_WAYS);
 
-    if (time_miss > time_hit * 2) {
+    if (time_miss > time_hit * 1.5) {
         printf("SUCCESS: Eviction observed!\n");
     } else {
         printf("FAILURE: No significant eviction observed.\n");

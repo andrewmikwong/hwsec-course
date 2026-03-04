@@ -3,6 +3,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
@@ -10,38 +11,79 @@
 #define STRIDE (1<<16)
 #endif
 
-// Threshold for L2 miss vs hit
-// L2 hit ~14 cycles
-// L2 miss (L3 hit) ~50-70 cycles
-// DRAM ~200+ cycles
-// We will measure the average access time of the set.
-// A threshold of 45-50 seems reasonable for a single access.
-// If we sum 16 accesses, the threshold would be higher.
-// Let's use a single probe for simplicity first, as it's faster.
-// If we see noise, we can switch to full set probe.
-#define THRESHOLD 45
+// Threshold for L2 miss vs hit (16 accesses)
+// L2 Hit ~224 cycles
+// L2 Miss ~410 cycles
+#define THRESHOLD 320
+
+// Inline rdtscp for timing
+static inline uint64_t rdtscp(void) {
+    uint32_t lo, hi;
+    asm volatile("rdtscp" : "=a"(lo), "=d"(hi) :: "rcx");
+    return ((uint64_t)hi << 32) | lo;
+}
+
+// Linked list node
+struct node {
+    struct node *next;
+    char pad[64 - sizeof(struct node *)]; // Pad to cache line size
+};
 
 void *buf;
+struct node *sets[256]; // Pointers to the start of each set's list
 
-// Prime a specific set
-void prime_set(int set_index) {
-    char *base = (char *)buf;
-    volatile char *addr;
-    for (int i = 0; i < L2_WAYS; i++) {
-        addr = base + set_index * 64 + i * STRIDE;
-        *addr;
+// Shuffle an array of pointers
+void shuffle(struct node **array, int n) {
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        struct node *temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
     }
 }
 
-// Probe a specific set and return the access time of the first line
-CYCLES probe_set(int set_index) {
+// Build shuffled linked list for a set
+void build_set(int set_index) {
     char *base = (char *)buf;
-    volatile char *addr = base + set_index * 64; // The first address we primed
-    return measure_one_block_access_time((ADDR_PTR)addr);
+    struct node *nodes[L2_WAYS];
+    
+    for (int i = 0; i < L2_WAYS; i++) {
+        nodes[i] = (struct node *)(base + set_index * 64 + i * STRIDE);
+    }
+    
+    shuffle(nodes, L2_WAYS);
+    
+    for (int i = 0; i < L2_WAYS - 1; i++) {
+        nodes[i]->next = nodes[i+1];
+    }
+    nodes[L2_WAYS-1]->next = NULL;
+    
+    sets[set_index] = nodes[0];
+}
+
+// Prime a specific set
+void prime_set(int set_index) {
+    struct node *curr = sets[set_index];
+    while (curr) {
+        curr = curr->next;
+    }
+}
+
+// Probe a specific set and return the access time
+uint64_t probe_set(int set_index) {
+    uint64_t start = rdtscp();
+    struct node *curr = sets[set_index];
+    while (curr) {
+        curr = curr->next;
+    }
+    uint64_t end = rdtscp();
+    return end - start;
 }
 
 int main(int argc, char **argv)
 {
+    srand(time(NULL));
+
     // Allocate huge page
     buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
     
@@ -51,6 +93,11 @@ int main(int argc, char **argv)
     }
     
     *((char *)buf) = 1; // dummy write
+
+    // Build sets 0-8
+    for (int i = 0; i <= 8; i++) {
+        build_set(i);
+    }
 
     printf("Please press enter.\n");
     char text_buf[2];
@@ -73,7 +120,7 @@ int main(int argc, char **argv)
         
         // 3. Probe Sets 0-8
         // Check Valid Bit (Set 8) first
-        CYCLES t8 = probe_set(8);
+        uint64_t t8 = probe_set(8);
         
         if (t8 > THRESHOLD) {
             // Valid signal detected! (Set 8 was evicted)
@@ -81,18 +128,13 @@ int main(int argc, char **argv)
             
             // Decode bits 0-7
             for (int i = 0; i < 8; i++) {
-                CYCLES t = probe_set(i);
+                uint64_t t = probe_set(i);
                 if (t > THRESHOLD) {
                     received_byte |= (1 << i);
                 }
             }
             
-            // Debouncing: Only print if we see the same value multiple times consecutively
-            // or just print once per "new" value if it's stable.
-            // Simple logic: if it matches the last one, increment counter.
-            // If counter > N, print and reset.
-            // But we want to print *once* per transmission.
-            
+            // Debouncing
             if (received_byte == last_received) {
                 consecutive_reads++;
             } else {
