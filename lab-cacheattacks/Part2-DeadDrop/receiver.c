@@ -12,9 +12,10 @@
 #endif
 
 // Threshold for L2 miss vs hit (16 accesses)
-// L2 Hit ~224 cycles
-// L2 Miss ~410 cycles
-#define THRESHOLD 320
+// Observed Hit: ~1100 cycles
+// Observed Miss: ~2350 cycles
+// Midpoint: ~1700
+#define THRESHOLD 1700
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
