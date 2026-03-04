@@ -103,7 +103,7 @@ int main(int argc, char **argv)
       // Send the message for a duration
       // We use a simple loop count to hold the signal
       // 200000 iterations should be plenty of time for the receiver to notice
-      long duration = 200000;
+      long duration = 400000; // Increased duration
       
       for (long k = 0; k < duration; k++) {
           // 1. Evict Valid Bit (Set 8)

@@ -12,6 +12,11 @@
 #define STRIDE (1<<16)
 #endif
 
+// Spacing between sets to avoid adjacent line prefetcher (Spatial Prefetcher)
+// The prefetcher might fetch line N+1 when N is accessed.
+// We skip 16 sets (1KB) to be safe.
+#define SET_SPACING 16
+
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
     uint32_t lo, hi;
@@ -40,12 +45,15 @@ void shuffle(struct node **array, int n) {
 }
 
 // Build shuffled linked list for a set
-void build_set(int set_index) {
+void build_set(int logical_set_index) {
     char *base = (char *)buf;
     struct node *nodes[L2_WAYS];
     
+    // Map logical set index to physical set index with spacing
+    int physical_set_index = logical_set_index * SET_SPACING;
+    
     for (int i = 0; i < L2_WAYS; i++) {
-        nodes[i] = (struct node *)(base + set_index * 64 + i * STRIDE);
+        nodes[i] = (struct node *)(base + physical_set_index * 64 + i * STRIDE);
     }
     
     shuffle(nodes, L2_WAYS);
@@ -55,7 +63,7 @@ void build_set(int set_index) {
     }
     nodes[L2_WAYS-1]->next = NULL;
     
-    sets[set_index] = nodes[0];
+    sets[logical_set_index] = nodes[0];
 }
 
 // Prime a specific set
@@ -93,7 +101,8 @@ void calibrate(uint64_t manual_threshold) {
             }
             uint64_t avg_hit = sum / samples;
             thresholds[i] = avg_hit * 3 / 2; // Default 1.5x
-            printf("Set %d: Avg Hit = %llu, Threshold = %llu\n", i, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
+            printf("Set %d (Phys %d): Avg Hit = %llu, Threshold = %llu\n", 
+                   i, i * SET_SPACING, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
         }
     }
     if (manual_threshold > 0) {
@@ -144,7 +153,7 @@ int main(int argc, char **argv)
         
         // 2. Wait (allow sender to intervene)
         // Busy wait for a short period to let the sender run
-        for(volatile int k=0; k<2000; k++); 
+        for(volatile int k=0; k<5000; k++); 
         
         // 3. Probe Sets 0-8
         // Check Valid Bit (Set 8) first
@@ -170,10 +179,28 @@ int main(int argc, char **argv)
                 last_received = received_byte;
             }
             
-            if (consecutive_reads == 50) { // Stable for 50 iterations
+            if (consecutive_reads == 20) { // Stable for 20 iterations
                 printf("%d\n", received_byte);
-                // Debug: Print detected latencies to help tune
-                // printf("DEBUG: Set 8 Latency: %llu (Threshold: %llu)\n", (unsigned long long)t8, (unsigned long long)thresholds[8]);
+                
+                // Wait for signal to drop (Set 8 becomes Hit again)
+                // This prevents re-printing the same message
+                int timeout = 0;
+                while(1) {
+                    prime_set(8);
+                    for(volatile int k=0; k<5000; k++);
+                    if (probe_set(8) < thresholds[8]) {
+                        break; // Signal dropped
+                    }
+                    
+                    timeout++;
+                    if (timeout > 1000) { // ~5-10 seconds timeout?
+                        // If it hangs here for too long, maybe sender is stuck or noise is high.
+                        // Break out to allow re-calibration or just continuing.
+                        break;
+                    }
+                }
+                last_received = -1;
+                consecutive_reads = 0;
             }
         } else {
             // No valid signal
