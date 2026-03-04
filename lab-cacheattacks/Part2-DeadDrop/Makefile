@@ -1,6 +1,6 @@
 include ../cpu.mk
 
-TARGETS=receiver sender test_unit test_eviction
+TARGETS=receiver sender test_eviction
 UTILS=util.o
 
 all: $(TARGETS)
@@ -19,9 +19,6 @@ sender: sender.o $(UTILS)
 
 receiver: receiver.o $(UTILS)
 	$(CC) $(CFLAGS) receiver.o $(UTILS) -o receiver
-
-test_unit: test_unit.o $(UTILS)
-	$(CC) $(CFLAGS) test_unit.o $(UTILS) -o test_unit
 
 test_eviction: test_eviction.o $(UTILS)
 	$(CC) $(CFLAGS) test_eviction.o $(UTILS) -o test_eviction
