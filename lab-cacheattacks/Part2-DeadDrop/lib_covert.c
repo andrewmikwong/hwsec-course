@@ -3,13 +3,27 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <unistd.h>
 
+// Try to allocate Huge Page, fall back to posix_memalign if needed (but warn!)
 void *allocate_huge_page() {
     void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, 
                     MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
+    
     if (buf == MAP_FAILED) {
-        perror("mmap huge page failed");
-        return NULL;
+        perror(" [WARN] mmap huge page failed! Trying standard allocation...");
+        // Fallback: 2MB aligned allocation
+        if (posix_memalign(&buf, BUFF_SIZE, BUFF_SIZE) != 0) {
+            perror("posix_memalign failed");
+            return NULL;
+        }
+        // Lock memory to prevent swapping
+        if (mlock(buf, BUFF_SIZE) != 0) {
+            perror("mlock failed");
+        }
+        printf(" [WARN] Using standard 4KB pages. Attack may be unreliable!\n");
+    } else {
+        printf(" [INFO] Huge Page Allocated Successfully.\n");
     }
     return buf;
 }
@@ -20,6 +34,10 @@ void **setup_eviction_set(void *base, int set_index, int ways) {
     // Calculate addresses
     for (int w = 0; w < ways; w++) {
         uint64_t offset = (w * L2_STRIDE) + (set_index * CACHE_LINE_SIZE);
+        if (offset >= BUFF_SIZE) {
+            fprintf(stderr, "Error: Offset %lu exceeds buffer size %d\n", offset, BUFF_SIZE);
+            exit(1);
+        }
         pointers[w] = (void **)((char *)base + offset);
     }
 

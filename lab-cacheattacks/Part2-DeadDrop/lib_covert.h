@@ -6,12 +6,14 @@
 #include <stdbool.h>
 
 // Hardware Configuration (Skylake L2)
-#define BUFF_SIZE (1<<21)       // 2MB Huge Page
+// 16 ways * 64KB stride = 1MB needed. 
+// 4MB Buffer to be safe and cover all sets with stride
+#define BUFF_SIZE (1<<22)       // 4MB
 #define L2_STRIDE 65536         // 64KB
 #define CACHE_LINE_SIZE 64
 #define NUM_SETS 1024           // Skylake L2 has 1024 sets
 
-// Allocates a 2MB Huge Page. Returns NULL on failure.
+// Allocates a Huge Page. Returns NULL on failure.
 void *allocate_huge_page();
 
 // Sets up a circular linked list (pointer chasing) for a specific cache set.
