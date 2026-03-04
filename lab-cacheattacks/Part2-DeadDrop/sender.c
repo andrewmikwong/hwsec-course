@@ -12,9 +12,9 @@
 #define STRIDE (1<<16)
 #endif
 
-// Revert to the configuration that worked (Spacing 16, Base 0)
-#define SET_SPACING 16
-#define BASE_SET 0
+// Maximize isolation: 2KB spacing, start at set 64
+#define SET_SPACING 32
+#define BASE_SET 64
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
@@ -117,15 +117,9 @@ int main(int argc, char **argv)
 
       // Send the message for a duration
       // We use a simple loop count to hold the signal
-      // 1,000,000 iterations to compensate for stricter receiver
-      long duration = 1000000; 
+      // Increased duration to 2,000,000 to compensate for accumulation loop
+      long duration = 2000000; 
       
-      // Sync Pulse: Send Set 8 ONLY for a short burst to wake up receiver
-      long sync_duration = 50000;
-      for (long k = 0; k < sync_duration; k++) {
-          evict_set(8);
-      }
-
       for (long k = 0; k < duration; k++) {
           // 1. Evict Valid Bit (Set 8)
           evict_set(8);
