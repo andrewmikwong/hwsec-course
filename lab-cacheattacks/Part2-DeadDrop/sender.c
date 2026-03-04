@@ -1,88 +1,79 @@
-#include "lib_covert.h"
 #include "util.h"
-#include <stdio.h>
+#include <sys/mman.h>
+#include <time.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <stdio.h>
 
-// Skylake L2: 1MB / 64B line / 16 ways = 1024 sets
-#define L2_SETS 1024
+// 2MB Huge Page
+#define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
+// Stride to reach the same set index in the next "color" of the huge page
+// 64KB stride
+#define STRIDE (1<<16)
 
-// Duration of one bit in cycles (approx 0.5 seconds at 2GHz)
-#define BIT_PERIOD (1ULL << 29) // Reduced slightly for responsiveness
+void *buf;
+
+// Evict a specific L2 set by accessing congruent addresses
+void evict_set(int set_index) {
+    char *base = (char *)buf;
+    volatile char *addr;
+    // Access 16 addresses that map to the same set
+    for (int i = 0; i < L2_WAYS; i++) {
+        addr = base + set_index * 64 + i * STRIDE;
+        *addr; // Read access
+    }
+}
 
 int main(int argc, char **argv)
 {
-    // 1. Allocate a large buffer (Huge Page)
-    void *buf = allocate_huge_page();
-    if (!buf) {
-        fprintf(stderr, "Failed to allocate huge page\n");
-        return 1;
-    }
+  // Allocate a buffer using huge page
+  buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
+  
+  if (buf == (void*) - 1) {
+     perror("mmap() error\n");
+     exit(EXIT_FAILURE);
+  }
+  
+  *((char *)buf) = 1; // dummy write to trigger page allocation
 
-    // 2. Prepare eviction sets for the WHOLE L2 cache
-    printf("Sender: Initializing %d sets (covering whole L2)...\n", L2_SETS);
-    void **sets[L2_SETS];
-    for (int i = 0; i < L2_SETS; i++) {
-        sets[i] = setup_eviction_set(buf, i, L2_WAYS);
-    }
+  printf("Please type a message.\n");
 
-    // 3. Calibration Mode (optional)
-    if (argc > 1 && strcmp(argv[1], "-c") == 0) {
-        printf("Sender: Calibration Mode (Sending continuous 1s)...\n");
-        printf("Run receiver with ./receiver -c to measure threshold.\n");
-        while (1) {
-            // Unroll loop for maximum aggression
-            for (int s = 0; s < L2_SETS; s+=4) {
-                traverse_list(sets[s], L2_WAYS);
-                traverse_list(sets[s+1], L2_WAYS);
-                traverse_list(sets[s+2], L2_WAYS);
-                traverse_list(sets[s+3], L2_WAYS);
-            }
-        }
-    }
+  bool sending = true;
+  while (sending) {
+      char text_buf[128];
+      if (fgets(text_buf, sizeof(text_buf), stdin) == NULL) break;
 
-    printf("Sender: Ready. Enter message:\n");
+      // Parse integer from input
+      int message = atoi(text_buf);
+      
+      // Basic validation
+      if (message < 0 || message > 255) {
+          printf("Please enter a value between 0 and 255.\n");
+          continue;
+      }
 
-    while (1) {
-        char text_buf[128];
-        if (fgets(text_buf, sizeof(text_buf), stdin) == NULL) break;
-        
-        // Strip newline
-        text_buf[strcspn(text_buf, "\n")] = 0;
-        if (strlen(text_buf) == 0) continue;
+      printf("Sending: %d\n", message);
 
-        char *binary = string_to_binary(text_buf);
-        printf("Sending: '%s' (%s)\n", text_buf, binary);
+      // Send the message for a duration
+      // We use a simple loop count to hold the signal
+      // 200000 iterations should be plenty of time for the receiver to notice
+      long duration = 200000;
+      
+      for (long k = 0; k < duration; k++) {
+          // 1. Evict Valid Bit (Set 8)
+          evict_set(8);
+          
+          // 2. Evict Data Bits (Sets 0-7)
+          for (int i = 0; i < 8; i++) {
+              if ((message >> i) & 1) {
+                  evict_set(i);
+              }
+          }
+      }
+      
+      printf("Sent.\n");
+  }
 
-        for (int i = 0; i < strlen(binary); i++) {
-            char bit = binary[i];
-            uint64_t start = get_time_serializing();
-            
-            if (bit == '1') {
-                // SEND 1: Create contention by thrashing L2
-                while (get_time_serializing() < start + BIT_PERIOD) {
-                    for (int s = 0; s < L2_SETS; s+=4) {
-                        traverse_list(sets[s], L2_WAYS);
-                        traverse_list(sets[s+1], L2_WAYS);
-                        traverse_list(sets[s+2], L2_WAYS);
-                        traverse_list(sets[s+3], L2_WAYS);
-                    }
-                }
-            } else {
-                // SEND 0: Do nothing (low contention)
-                while (get_time_serializing() < start + BIT_PERIOD) {
-                    asm volatile("nop");
-                    // Small sleep to yield CPU resources (makes 0 cleaner)
-                    usleep(10); 
-                }
-            }
-        }
-        
-        printf("Sent.\n");
-        free(binary);
-    }
-
-    return 0;
+  printf("Sender finished.\n");
+  return 0;
 }

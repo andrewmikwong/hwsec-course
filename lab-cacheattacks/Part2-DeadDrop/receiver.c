@@ -1,145 +1,121 @@
-#include "lib_covert.h"
 #include "util.h"
-#include <stdio.h>
+#include <sys/mman.h>
+#include <time.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
+#include <stdio.h>
 
-#define L2_SETS 1024
+#define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
-#define SAMPLES 100
+#define STRIDE (1<<16)
 
-// Helper to calculate statistics
-void calculate_stats(uint64_t *data, int n, uint64_t *avg, uint64_t *min, uint64_t *max) {
-    uint64_t sum = 0;
-    *min = -1ULL;
-    *max = 0;
-    for(int i=0; i<n; i++) {
-        sum += data[i];
-        if(data[i] < *min) *min = data[i];
-        if(data[i] > *max) *max = data[i];
+// Threshold for L2 miss vs hit
+// L2 hit ~14 cycles
+// L2 miss (L3 hit) ~50-70 cycles
+// DRAM ~200+ cycles
+// We will measure the average access time of the set.
+// A threshold of 45-50 seems reasonable for a single access.
+// If we sum 16 accesses, the threshold would be higher.
+// Let's use a single probe for simplicity first, as it's faster.
+// If we see noise, we can switch to full set probe.
+#define THRESHOLD 45
+
+void *buf;
+
+// Prime a specific set
+void prime_set(int set_index) {
+    char *base = (char *)buf;
+    volatile char *addr;
+    for (int i = 0; i < L2_WAYS; i++) {
+        addr = base + set_index * 64 + i * STRIDE;
+        *addr;
     }
-    *avg = sum / n;
 }
 
-// Convert 8 bits to a character
-char bits_to_char(int *bits) {
-    char c = 0;
-    for (int i = 0; i < 8; i++) {
-        if (bits[i]) {
-            c |= (1 << (7 - i));
-        }
-    }
-    return c;
+// Probe a specific set and return the access time of the first line
+CYCLES probe_set(int set_index) {
+    char *base = (char *)buf;
+    volatile char *addr = base + set_index * 64; // The first address we primed
+    return measure_one_block_access_time((ADDR_PTR)addr);
 }
 
 int main(int argc, char **argv)
 {
-    setbuf(stdout, NULL);
-    void *buf = allocate_huge_page();
-    if (!buf) {
-        fprintf(stderr, "Failed to allocate huge page\n");
-        return 1;
+    // Allocate huge page
+    buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
+    
+    if (buf == (void*) - 1) {
+        perror("mmap() error\n");
+        exit(EXIT_FAILURE);
     }
+    
+    *((char *)buf) = 1; // dummy write
 
-    printf("Receiver: Initializing %d sets...\n", L2_SETS);
-    void **sets[L2_SETS];
-    for (int i = 0; i < L2_SETS; i++) {
-        sets[i] = setup_eviction_set(buf, i, L2_WAYS);
-    }
+    printf("Please press enter.\n");
+    char text_buf[2];
+    fgets(text_buf, sizeof(text_buf), stdin);
+    printf("Receiver now listening.\n");
 
-    uint64_t threshold = 0;
-    uint64_t idle_samples[SAMPLES];
-    uint64_t load_samples[SAMPLES];
-
-    // --- STEP 1 & 2: CALIBRATION (Deriving the Threshold) ---
-    if (argc > 1) {
-        threshold = atoll(argv[1]);
-        printf("Using provided threshold: %lu\n", threshold);
-    } else {
-        printf("\n=== CALIBRATION ===\n");
-        printf("1. Ensure Sender is NOT running.\n");
-        printf("   Press Enter to measure IDLE noise...\n");
-        getchar();
-
-        for (int k = 0; k < SAMPLES; k++) {
-            uint64_t t_sum = 0;
-            for (int i = 0; i < L2_SETS; i++) {
-                t_sum += probe_16way_asm(sets[i]);
-            }
-            idle_samples[k] = t_sum / L2_SETS;
-            usleep(1000);
+    bool listening = true;
+    int last_received = -1;
+    int consecutive_reads = 0;
+    
+    while (listening) {
+        // 1. Prime Sets 0-8
+        for (int i = 0; i <= 8; i++) {
+            prime_set(i);
         }
-
-        uint64_t avg_idle, min_idle, max_idle;
-        calculate_stats(idle_samples, SAMPLES, &avg_idle, &min_idle, &max_idle);
-        printf("IDLE Stats: Avg=%lu, Min=%lu, Max=%lu\n", avg_idle, min_idle, max_idle);
-
-        printf("\n2. Start 'sender -c' (calibration mode) on SIBLING CORE.\n");
-        printf("   Press Enter to measure LOAD noise...\n");
-        getchar();
-
-        for (int k = 0; k < SAMPLES; k++) {
-            uint64_t t_sum = 0;
-            for (int i = 0; i < L2_SETS; i++) {
-                t_sum += probe_16way_asm(sets[i]);
+        
+        // 2. Wait (allow sender to intervene)
+        // Busy wait for a short period to let the sender run
+        for(volatile int k=0; k<2000; k++); 
+        
+        // 3. Probe Sets 0-8
+        // Check Valid Bit (Set 8) first
+        CYCLES t8 = probe_set(8);
+        
+        if (t8 > THRESHOLD) {
+            // Valid signal detected! (Set 8 was evicted)
+            int received_byte = 0;
+            
+            // Decode bits 0-7
+            for (int i = 0; i < 8; i++) {
+                CYCLES t = probe_set(i);
+                if (t > THRESHOLD) {
+                    received_byte |= (1 << i);
+                }
             }
-            load_samples[k] = t_sum / L2_SETS;
-            usleep(1000);
-        }
-
-        uint64_t avg_load, min_load, max_load;
-        calculate_stats(load_samples, SAMPLES, &avg_load, &min_load, &max_load);
-        printf("LOAD Stats: Avg=%lu, Min=%lu, Max=%lu\n", avg_load, min_load, max_load);
-
-        if (avg_load <= avg_idle) {
-            printf("\n[CRITICAL ERROR] No signal detected. Check CPU Pinning!\n");
-            threshold = avg_idle * 2;
+            
+            // Debouncing: Only print if we see the same value multiple times consecutively
+            // or just print once per "new" value if it's stable.
+            // Simple logic: if it matches the last one, increment counter.
+            // If counter > N, print and reset.
+            // But we want to print *once* per transmission.
+            
+            if (received_byte == last_received) {
+                consecutive_reads++;
+            } else {
+                consecutive_reads = 1;
+                last_received = received_byte;
+            }
+            
+            if (consecutive_reads == 50) { // Stable for 50 iterations
+                printf("%d\n", received_byte);
+                // Reset to avoid printing again immediately? 
+                // No, we might want to print again if the sender sends again.
+                // But the sender holds for 200000 iterations.
+                // We will see it many times.
+                // We should wait until it changes or disappears to print again.
+                // For now, let's just print. The requirement is to print the message.
+                // The example output shows "47" once.
+                // So we should suppress duplicates until the signal drops.
+            }
         } else {
-            threshold = (avg_idle + avg_load) / 2;
+            // No valid signal
+            last_received = -1;
+            consecutive_reads = 0;
         }
-        printf("\nCalculated Threshold: %lu\n", threshold);
-        printf("===================\n\n");
     }
-
-    // --- STEP 3: DECODE (Listening for Message) ---
-    printf("Receiver: Listening for message...\n");
     
-    int bit_buffer[8];
-    int bit_index = 0;
-    
-    while (1) {
-        uint64_t t_sum = 0;
-        for (int i = 0; i < L2_SETS; i++) {
-            t_sum += probe_16way_asm(sets[i]);
-        }
-        uint64_t avg_time = t_sum / L2_SETS;
-
-        // Physical Decode: 0 or 1?
-        // INVERTED LOGIC based on observed behavior (Power/Wake-up Latency Channel)
-        // Sender ON -> Keeps core awake -> Low Latency (< Threshold) -> Bit 1
-        // Sender OFF -> Core sleeps -> High Latency (> Threshold) -> Bit 0
-        int bit = (avg_time < threshold) ? 0 : 1;
-        
-        // Print raw bit for debugging
-        printf("%d", bit);
-        fflush(stdout);
-
-        // Application Decode: Collect 8 bits -> Char
-        // Note: Real synchronization requires a start sequence.
-        // For this simple lab, we just group every 8 bits.
-        bit_buffer[bit_index++] = bit;
-        
-        if (bit_index == 8) {
-            char c = bits_to_char(bit_buffer);
-            printf(" [%c]\n", c); // Print the decoded character
-            bit_index = 0;
-        }
-        
-        // Wait for next bit period (Sender sends 1 bit every ~0.5s)
-        // We sleep slightly less to account for processing time
-        usleep(400000); 
-    }
-
+    printf("Receiver finished.\n");
     return 0;
 }
