@@ -12,8 +12,13 @@
 #define STRIDE (1<<16)
 #endif
 
-// Spacing between sets to avoid adjacent line prefetcher (Spatial Prefetcher)
-#define SET_SPACING 16
+// Spacing between sets to avoid adjacent line prefetcher AND L1 aliasing.
+// Spacing 16 caused L1 aliasing (Set 0 and Set 4 mapped to same L1 set).
+// Spacing 17 avoids this (17 is coprime to 64).
+#define SET_SPACING 17
+
+// Start at a higher set index to avoid Set 0 which is often busy
+#define BASE_SET 32
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
@@ -47,8 +52,8 @@ void build_set(int logical_set_index) {
     char *base = (char *)buf;
     struct node *nodes[L2_WAYS];
     
-    // Map logical set index to physical set index with spacing
-    int physical_set_index = logical_set_index * SET_SPACING;
+    // Map logical set index to physical set index with spacing and offset
+    int physical_set_index = BASE_SET + (logical_set_index * SET_SPACING);
     
     for (int i = 0; i < L2_WAYS; i++) {
         nodes[i] = (struct node *)(base + physical_set_index * 64 + i * STRIDE);
@@ -98,10 +103,10 @@ void calibrate(uint64_t manual_threshold) {
                 sum += probe_set(i);
             }
             uint64_t avg_hit = sum / samples;
-            // Increased multiplier to 2.0x to reduce false positives
+            // 2.0x is a safe conservative threshold
             thresholds[i] = avg_hit * 2; 
             printf("Set %d (Phys %d): Avg Hit = %llu, Threshold = %llu\n", 
-                   i, i * SET_SPACING, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
+                   i, BASE_SET + (i * SET_SPACING), (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
         }
     }
     if (manual_threshold > 0) {
@@ -178,7 +183,6 @@ int main(int argc, char **argv)
                 last_received = received_byte;
             }
             
-            // Increased requirement to 50 to filter out transient noise
             if (consecutive_reads == 50) { 
                 printf("%d\n", received_byte);
                 
@@ -192,7 +196,7 @@ int main(int argc, char **argv)
                     }
                     
                     timeout++;
-                    if (timeout > 2000) { // Increased timeout
+                    if (timeout > 2000) {
                         break;
                     }
                 }
