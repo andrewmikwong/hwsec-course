@@ -19,20 +19,6 @@
 #define ADDR_PTR uint64_t 
 #define CYCLES uint32_t
 
-// Prime+Probe Constants
-#ifndef BUFF_SIZE
-#define BUFF_SIZE (1<<21)
-#endif
-#define STRIDE (64 * 1024)
-#define WAY_COUNT 20
-#define SLOT_TIME 100000
-
-static inline uint64_t get_time() {
-    uint64_t a, d;
-    asm volatile("rdtsc" : "=a"(a), "=d"(d));
-    return (d << 32) | a;
-}
-
 CYCLES measure_one_block_access_time(ADDR_PTR addr);
 
 // You Should Not Use clflush in your final submission
