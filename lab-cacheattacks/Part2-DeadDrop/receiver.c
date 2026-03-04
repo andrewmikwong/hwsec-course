@@ -16,6 +16,9 @@ static inline uint64_t get_time_serializing() {
 
 int main(int argc, char **argv)
 {
+    // Disable buffering
+    setbuf(stdout, NULL);
+
     // Allocate Huge Page
     void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, 
                     MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
@@ -26,15 +29,11 @@ int main(int argc, char **argv)
     }
     memset(buf, 1, BUFF_SIZE);
 
-    // Handshake
-    printf("READY\n");
-    fflush(stdout);
-    
-    char text_buf[128];
-    if (fgets(text_buf, sizeof(text_buf), stdin) == NULL) return 0;
+    printf("Please press enter.\n");
+    char text_buf[2];
+    fgets(text_buf, sizeof(text_buf), stdin);
 
-    printf("LISTENING\n");
-    fflush(stdout);
+    printf("Receiver now listening.\n");
 
     while (1) {
         for (int set = 0; set < 256; set++) {
@@ -77,7 +76,7 @@ int main(int argc, char **argv)
                 uint64_t total_time = t2 - t1;
 
                 // 4. THRESHOLD
-                if (total_time > 800) {
+                if (total_time > 612) {
                     confidence++;
                 } else {
                     confidence = 0;
@@ -87,8 +86,7 @@ int main(int argc, char **argv)
 
             if (confidence == required_confidence) {
                 printf("Received value: %d\n", set);
-                fflush(stdout);
-                // sleep(1); // Removed sleep for faster tuning
+                // sleep(1); // Removed sleep for responsiveness
             }
         }
     }
