@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
@@ -77,25 +78,37 @@ uint64_t probe_set(int set_index) {
 }
 
 // Calibrate thresholds
-void calibrate() {
+void calibrate(uint64_t manual_threshold) {
     printf("Calibrating thresholds...\n");
     for (int i = 0; i <= 8; i++) {
-        uint64_t sum = 0;
-        int samples = 1000;
-        for (int k = 0; k < samples; k++) {
-            prime_set(i);
-            // No wait
-            sum += probe_set(i);
+        if (manual_threshold > 0) {
+            thresholds[i] = manual_threshold;
+        } else {
+            uint64_t sum = 0;
+            int samples = 1000;
+            for (int k = 0; k < samples; k++) {
+                prime_set(i);
+                // No wait
+                sum += probe_set(i);
+            }
+            uint64_t avg_hit = sum / samples;
+            thresholds[i] = avg_hit * 3 / 2; // Default 1.5x
+            printf("Set %d: Avg Hit = %llu, Threshold = %llu\n", i, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
         }
-        uint64_t avg_hit = sum / samples;
-        thresholds[i] = avg_hit * 3 / 2;
-        printf("Set %d: Avg Hit = %llu, Threshold = %llu\n", i, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
+    }
+    if (manual_threshold > 0) {
+        printf("Using manual threshold: %llu\n", (unsigned long long)manual_threshold);
     }
 }
 
 int main(int argc, char **argv)
 {
     srand(time(NULL));
+
+    uint64_t manual_threshold = 0;
+    if (argc > 1) {
+        manual_threshold = strtoull(argv[1], NULL, 10);
+    }
 
     // Allocate huge page
     buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
@@ -112,7 +125,7 @@ int main(int argc, char **argv)
         build_set(i);
     }
 
-    calibrate();
+    calibrate(manual_threshold);
 
     printf("Please press enter.\n");
     char text_buf[2];
@@ -159,10 +172,8 @@ int main(int argc, char **argv)
             
             if (consecutive_reads == 50) { // Stable for 50 iterations
                 printf("%d\n", received_byte);
-                // We print once per stable detection.
-                // To allow re-printing if the sender sends again (after a pause),
-                // we need to detect the "pause" (Set 8 valid dropping).
-                // That happens in the 'else' block below.
+                // Debug: Print detected latencies to help tune
+                // printf("DEBUG: Set 8 Latency: %llu (Threshold: %llu)\n", (unsigned long long)t8, (unsigned long long)thresholds[8]);
             }
         } else {
             // No valid signal
