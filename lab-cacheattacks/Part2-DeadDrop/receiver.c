@@ -6,9 +6,20 @@
 
 #define L2_SETS 1024
 #define L2_WAYS 16
-
-// Number of samples for calibration
 #define SAMPLES 100
+
+// Helper to calculate statistics
+void calculate_stats(uint64_t *data, int n, uint64_t *avg, uint64_t *min, uint64_t *max) {
+    uint64_t sum = 0;
+    *min = -1ULL;
+    *max = 0;
+    for(int i=0; i<n; i++) {
+        sum += data[i];
+        if(data[i] < *min) *min = data[i];
+        if(data[i] > *max) *max = data[i];
+    }
+    *avg = sum / n;
+}
 
 int main(int argc, char **argv)
 {
@@ -26,52 +37,52 @@ int main(int argc, char **argv)
     }
 
     uint64_t threshold = 0;
+    uint64_t idle_samples[SAMPLES];
+    uint64_t load_samples[SAMPLES];
 
-    // --- CALIBRATION STEP ---
-    // We need to know the difference between "Sender Idle" and "Sender Active"
     if (argc > 1) {
         threshold = atoll(argv[1]);
         printf("Using provided threshold: %lu\n", threshold);
     } else {
-        printf("\n=== CALIBRATION ===\n");
-        printf("1. Ensure Sender is NOT running (or sending 0).\n");
+        printf("\n=== CALIBRATION (Using Assembly Probing) ===\n");
+        printf("1. Ensure Sender is NOT running.\n");
         printf("   Press Enter to measure IDLE noise...\n");
         getchar();
 
-        uint64_t sum_idle = 0;
         for (int k = 0; k < SAMPLES; k++) {
-            uint64_t t1 = get_time_serializing();
+            uint64_t t_sum = 0;
+            // Probe all sets
             for (int i = 0; i < L2_SETS; i++) {
-                traverse_list(sets[i], L2_WAYS);
+                t_sum += probe_16way_asm(sets[i]);
             }
-            uint64_t t2 = get_time_serializing();
-            sum_idle += (t2 - t1);
+            idle_samples[k] = t_sum / L2_SETS; // Average time per set
+            usleep(1000);
         }
-        uint64_t avg_idle = sum_idle / SAMPLES;
-        printf("Avg IDLE time (0): %lu cycles\n", avg_idle);
 
-        printf("\n2. Start 'sender -c' (calibration mode) in the other terminal.\n");
+        uint64_t avg_idle, min_idle, max_idle;
+        calculate_stats(idle_samples, SAMPLES, &avg_idle, &min_idle, &max_idle);
+        printf("IDLE Stats (per set): Avg=%lu, Min=%lu, Max=%lu\n", avg_idle, min_idle, max_idle);
+
+        printf("\n2. Start 'sender -c' (calibration mode) on SIBLING CORE.\n");
         printf("   Press Enter to measure LOAD noise...\n");
         getchar();
 
-        uint64_t sum_load = 0;
         for (int k = 0; k < SAMPLES; k++) {
-            uint64_t t1 = get_time_serializing();
+            uint64_t t_sum = 0;
             for (int i = 0; i < L2_SETS; i++) {
-                traverse_list(sets[i], L2_WAYS);
+                t_sum += probe_16way_asm(sets[i]);
             }
-            uint64_t t2 = get_time_serializing();
-            sum_load += (t2 - t1);
+            load_samples[k] = t_sum / L2_SETS;
+            usleep(1000);
         }
-        uint64_t avg_load = sum_load / SAMPLES;
-        printf("Avg LOAD time (1): %lu cycles\n", avg_load);
+
+        uint64_t avg_load, min_load, max_load;
+        calculate_stats(load_samples, SAMPLES, &avg_load, &min_load, &max_load);
+        printf("LOAD Stats (per set): Avg=%lu, Min=%lu, Max=%lu\n", avg_load, min_load, max_load);
 
         if (avg_load <= avg_idle) {
-            printf("\n[ERROR] Load time is not significantly higher than Idle time!\n");
-            printf("        Are Sender/Receiver on the same physical core?\n");
-            printf("        Is the Sender actually running?\n");
-            // Set a fallback threshold just in case
-            threshold = avg_idle * 2; 
+            printf("\n[CRITICAL ERROR] No signal detected. Check CPU Pinning!\n");
+            threshold = avg_idle * 2;
         } else {
             threshold = (avg_idle + avg_load) / 2;
         }
@@ -79,26 +90,21 @@ int main(int argc, char **argv)
         printf("===================\n\n");
     }
 
-    printf("Receiver: Listening... (Press Ctrl+C to stop)\n");
+    printf("Receiver: Listening...\n");
     
-    // Simple loop to print 1s and 0s
     while (1) {
-        uint64_t t1 = get_time_serializing();
+        uint64_t t_sum = 0;
         for (int i = 0; i < L2_SETS; i++) {
-            traverse_list(sets[i], L2_WAYS);
+            t_sum += probe_16way_asm(sets[i]);
         }
-        uint64_t t2 = get_time_serializing();
-        uint64_t diff = t2 - t1;
+        uint64_t avg_time = t_sum / L2_SETS;
 
-        if (diff > threshold) {
-            printf("1");
+        if (avg_time > threshold) {
+            printf("1 (%lu)\n", avg_time);
         } else {
-            printf("0");
+            printf("0 (%lu)\n", avg_time);
         }
         
-        // Small delay to avoid flooding the screen too fast, 
-        // but not too long to miss the bit period.
-        // Since BIT_PERIOD is ~0.5s, we can sleep a bit.
         usleep(100000); // 0.1s
     }
 
