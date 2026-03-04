@@ -12,9 +12,9 @@
 #define STRIDE (1<<16)
 #endif
 
-// Keep Spacing 16, Base 0 as it was the most promising
-#define SET_SPACING 16
-#define BASE_SET 0
+// Maximize isolation: 2KB spacing, start at set 64
+#define SET_SPACING 32
+#define BASE_SET 64
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
@@ -95,17 +95,14 @@ void calibrate(uint64_t manual_threshold) {
             int samples = 1000;
             for (int k = 0; k < samples; k++) {
                 prime_set(i);
-                // No wait
                 sum += probe_set(i);
             }
             uint64_t avg_hit = sum / samples;
-            thresholds[i] = avg_hit * 2; // Back to 2.0x for safety
+            // 2.0x is safe.
+            thresholds[i] = avg_hit * 2; 
             printf("Set %d (Phys %d): Avg Hit = %llu, Threshold = %llu\n", 
                    i, BASE_SET + (i * SET_SPACING), (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
         }
-    }
-    if (manual_threshold > 0) {
-        printf("Using manual threshold: %llu\n", (unsigned long long)manual_threshold);
     }
 }
 
@@ -142,92 +139,75 @@ int main(int argc, char **argv)
 
     bool listening = true;
     
-    // History buffer for majority voting (last 20 samples)
-    #define HISTORY_LEN 20
-    int history[HISTORY_LEN];
-    int history_idx = 0;
-    for(int i=0; i<HISTORY_LEN; i++) history[i] = -1;
-
-    int last_printed = -1;
-    int cooldown = 0;
-
     while (listening) {
-        // 1. Prime Sets 0-8
-        for (int i = 0; i <= 8; i++) {
-            prime_set(i);
-        }
-        
-        // 2. Wait
-        for(volatile int k=0; k<5000; k++); 
-        
-        // 3. Probe Sets 0-8
-        // Check Valid Bit (Set 8) first
+        // 1. Scan for Valid Signal (Set 8)
+        prime_set(8);
+        for(volatile int k=0; k<2000; k++); // Short wait for detection
         uint64_t t8 = probe_set(8);
-        
-        int current_val = -1;
 
         if (t8 > thresholds[8]) {
-            // Valid signal detected!
-            int received_byte = 0;
-            for (int i = 0; i < 8; i++) {
-                uint64_t t = probe_set(i);
-                if (t > thresholds[i]) {
-                    received_byte |= (1 << i);
+            // Signal Detected!
+            // 2. Accumulate Samples
+            int bit_counts[8] = {0};
+            int samples = 100;
+            int valid_samples = 0;
+
+            for (int s = 0; s < samples; s++) {
+                // Prime all
+                for (int i = 0; i <= 8; i++) prime_set(i);
+                
+                // Wait
+                for(volatile int k=0; k<5000; k++); 
+                
+                // Probe all
+                uint64_t t_valid = probe_set(8);
+                if (t_valid > thresholds[8]) {
+                    valid_samples++;
+                    for (int i = 0; i < 8; i++) {
+                        if (probe_set(i) > thresholds[i]) {
+                            bit_counts[i]++;
+                        }
+                    }
                 }
             }
-            current_val = received_byte;
-        } else {
-            current_val = -1; // No signal
-        }
 
-        // Add to history
-        history[history_idx] = current_val;
-        history_idx = (history_idx + 1) % HISTORY_LEN;
-
-        // Majority Vote
-        // Count occurrences of each value in history
-        // Since values are 0-255, we can use a simple array or just find the most frequent
-        // -1 counts as "no signal"
-        
-        int counts[257]; // 0-255, and 256 for -1
-        for(int i=0; i<257; i++) counts[i] = 0;
-        
-        for(int i=0; i<HISTORY_LEN; i++) {
-            int val = history[i];
-            if (val == -1) counts[256]++;
-            else counts[val]++;
-        }
-
-        int max_count = 0;
-        int winner = -1;
-        for(int i=0; i<256; i++) { // Ignore -1 for winner selection
-            if (counts[i] > max_count) {
-                max_count = counts[i];
-                winner = i;
-            }
-        }
-
-        // Check if winner is dominant enough (> 70%)
-        if (winner != -1 && max_count > (HISTORY_LEN * 0.7)) {
-            if (winner != last_printed) {
-                if (cooldown == 0) {
-                    printf("%d\n", winner);
-                    last_printed = winner;
-                    cooldown = 100; // Wait 100 cycles before allowing new print
+            // 3. Decode
+            // If we had enough valid samples (signal stayed high)
+            if (valid_samples > (samples * 0.5)) {
+                int received_byte = 0;
+                for (int i = 0; i < 8; i++) {
+                    // Stricter voting: Bit must be high in > 75% of VALID samples
+                    // This filters out "ghost" bits that flicker due to noise
+                    if (bit_counts[i] > (valid_samples * 0.75)) {
+                        received_byte |= (1 << i);
+                    }
                 }
-            } else {
-                // Same as last printed, keep cooldown active if signal persists
-                if (cooldown > 0) cooldown = 100;
-            }
-        } else {
-            // No dominant signal
-            if (counts[256] > (HISTORY_LEN * 0.8)) {
-                // Dominant silence -> reset last_printed to allow re-printing same number
-                if (cooldown == 0) last_printed = -1;
+                printf("%d\n", received_byte);
+
+                // 4. Wait for Drop
+                // Wait until Set 8 is consistently low to avoid re-triggering
+                int consecutive_lows = 0;
+                int timeout = 0;
+                while(1) {
+                    prime_set(8);
+                    for(volatile int k=0; k<5000; k++);
+                    if (probe_set(8) < thresholds[8]) {
+                        consecutive_lows++;
+                    } else {
+                        consecutive_lows = 0;
+                    }
+                    
+                    if (consecutive_lows >= 10) {
+                        break; // Signal consistently dropped
+                    }
+
+                    timeout++;
+                    // Timeout increased to ~5 seconds (2,000,000 iterations)
+                    // Matches sender duration to prevent early exit
+                    if (timeout > 2000000) break; 
+                }
             }
         }
-
-        if (cooldown > 0) cooldown--;
     }
     
     printf("Receiver finished.\n");
