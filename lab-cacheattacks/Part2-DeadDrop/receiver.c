@@ -12,13 +12,10 @@
 #define STRIDE (1<<16)
 #endif
 
-// Spacing between sets to avoid adjacent line prefetcher AND L1 aliasing.
-// Spacing 16 caused L1 aliasing (Set 0 and Set 4 mapped to same L1 set).
-// Spacing 17 avoids this (17 is coprime to 64).
-#define SET_SPACING 17
-
-// Start at a higher set index to avoid Set 0 which is often busy
-#define BASE_SET 32
+// Revert to Spacing 16 (1KB) as it was working better.
+// Shift Base to 64 to avoid the noisy lower sets (0-32) that caused issues.
+#define SET_SPACING 16
+#define BASE_SET 64
 
 // Inline rdtscp for timing
 static inline uint64_t rdtscp(void) {
