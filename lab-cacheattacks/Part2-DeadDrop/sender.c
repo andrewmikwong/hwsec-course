@@ -4,13 +4,23 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
-// 2MB Huge Page
 #define BUFF_SIZE (1<<21)
 #define L2_WAYS 16
 #ifndef STRIDE
 #define STRIDE (1<<16)
 #endif
+
+// Spacing between sets to avoid adjacent line prefetcher (Spatial Prefetcher)
+#define SET_SPACING 16
+
+// Inline rdtscp for timing
+static inline uint64_t rdtscp(void) {
+    uint32_t lo, hi;
+    asm volatile("rdtscp" : "=a"(lo), "=d"(hi) :: "rcx");
+    return ((uint64_t)hi << 32) | lo;
+}
 
 // Linked list node
 struct node {
@@ -20,6 +30,7 @@ struct node {
 
 void *buf;
 struct node *sets[256]; // Pointers to the start of each set's list
+uint64_t thresholds[256]; // Per-set thresholds
 
 // Shuffle an array of pointers
 void shuffle(struct node **array, int n) {
@@ -32,12 +43,15 @@ void shuffle(struct node **array, int n) {
 }
 
 // Build shuffled linked list for a set
-void build_set(int set_index) {
+void build_set(int logical_set_index) {
     char *base = (char *)buf;
     struct node *nodes[L2_WAYS];
     
+    // Map logical set index to physical set index with spacing
+    int physical_set_index = logical_set_index * SET_SPACING;
+    
     for (int i = 0; i < L2_WAYS; i++) {
-        nodes[i] = (struct node *)(base + set_index * 64 + i * STRIDE);
+        nodes[i] = (struct node *)(base + physical_set_index * 64 + i * STRIDE);
     }
     
     shuffle(nodes, L2_WAYS);
@@ -45,9 +59,9 @@ void build_set(int set_index) {
     for (int i = 0; i < L2_WAYS - 1; i++) {
         nodes[i]->next = nodes[i+1];
     }
-    nodes[L2_WAYS-1]->next = NULL; // Terminate
+    nodes[L2_WAYS-1]->next = NULL;
     
-    sets[set_index] = nodes[0];
+    sets[logical_set_index] = nodes[0];
 }
 
 // Evict a specific L2 set by traversing the list
@@ -102,8 +116,8 @@ int main(int argc, char **argv)
 
       // Send the message for a duration
       // We use a simple loop count to hold the signal
-      // 200000 iterations should be plenty of time for the receiver to notice
-      long duration = 400000; // Increased duration
+      // Increased duration to 1,000,000 to compensate for stricter receiver
+      long duration = 1000000; 
       
       for (long k = 0; k < duration; k++) {
           // 1. Evict Valid Bit (Set 8)
