@@ -116,7 +116,10 @@ int main(int argc, char **argv)
         uint64_t avg_time = t_sum / L2_SETS;
 
         // Physical Decode: 0 or 1?
-        int bit = (avg_time > threshold) ? 1 : 0;
+        // INVERTED LOGIC based on observed behavior (Power/Wake-up Latency Channel)
+        // Sender ON -> Keeps core awake -> Low Latency (< Threshold) -> Bit 1
+        // Sender OFF -> Core sleeps -> High Latency (> Threshold) -> Bit 0
+        int bit = (avg_time < threshold) ? 1 : 0;
         
         // Print raw bit for debugging
         printf("%d", bit);
