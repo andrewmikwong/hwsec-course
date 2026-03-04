@@ -13,8 +13,6 @@
 #endif
 
 // Spacing between sets to avoid adjacent line prefetcher (Spatial Prefetcher)
-// The prefetcher might fetch line N+1 when N is accessed.
-// We skip 16 sets (1KB) to be safe.
 #define SET_SPACING 16
 
 // Inline rdtscp for timing
@@ -100,7 +98,8 @@ void calibrate(uint64_t manual_threshold) {
                 sum += probe_set(i);
             }
             uint64_t avg_hit = sum / samples;
-            thresholds[i] = avg_hit * 3 / 2; // Default 1.5x
+            // Increased multiplier to 2.0x to reduce false positives
+            thresholds[i] = avg_hit * 2; 
             printf("Set %d (Phys %d): Avg Hit = %llu, Threshold = %llu\n", 
                    i, i * SET_SPACING, (unsigned long long)avg_hit, (unsigned long long)thresholds[i]);
         }
@@ -179,11 +178,11 @@ int main(int argc, char **argv)
                 last_received = received_byte;
             }
             
-            if (consecutive_reads == 20) { // Stable for 20 iterations
+            // Increased requirement to 50 to filter out transient noise
+            if (consecutive_reads == 50) { 
                 printf("%d\n", received_byte);
                 
                 // Wait for signal to drop (Set 8 becomes Hit again)
-                // This prevents re-printing the same message
                 int timeout = 0;
                 while(1) {
                     prime_set(8);
@@ -193,9 +192,7 @@ int main(int argc, char **argv)
                     }
                     
                     timeout++;
-                    if (timeout > 1000) { // ~5-10 seconds timeout?
-                        // If it hangs here for too long, maybe sender is stuck or noise is high.
-                        // Break out to allow re-calibration or just continuing.
+                    if (timeout > 2000) { // Increased timeout
                         break;
                     }
                 }
