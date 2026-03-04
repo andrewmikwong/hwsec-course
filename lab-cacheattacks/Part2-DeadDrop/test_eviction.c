@@ -95,7 +95,7 @@ int main() {
     }
     uint64_t end = rdtscp();
     uint64_t time_hit = end - start;
-    printf("Victim Set Probe (Hit): %llu cycles (Avg per line: %llu)\n", time_hit, time_hit / L2_WAYS);
+    printf("Victim Set Probe (Hit): %llu cycles (Avg per line: %llu)\n", (unsigned long long)time_hit, (unsigned long long)(time_hit / L2_WAYS));
 
     // 3. Evict (Attacker accesses their set)
     // Traverse attacker list multiple times to ensure eviction
@@ -114,7 +114,7 @@ int main() {
     }
     end = rdtscp();
     uint64_t time_miss = end - start;
-    printf("Victim Set Probe (Miss): %llu cycles (Avg per line: %llu)\n", time_miss, time_miss / L2_WAYS);
+    printf("Victim Set Probe (Miss): %llu cycles (Avg per line: %llu)\n", (unsigned long long)time_miss, (unsigned long long)(time_miss / L2_WAYS));
 
     if (time_miss > time_hit * 1.5) {
         printf("SUCCESS: Eviction observed!\n");
