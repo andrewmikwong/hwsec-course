@@ -28,34 +28,6 @@ void *allocate_huge_page() {
     return buf;
 }
 
-void **setup_eviction_set(void *base, int set_index, int ways) {
-    void **pointers[ways];
-    
-    // Calculate addresses
-    for (int w = 0; w < ways; w++) {
-        uint64_t offset = (w * L2_STRIDE) + (set_index * CACHE_LINE_SIZE);
-        if (offset >= BUFF_SIZE) {
-            fprintf(stderr, "Error: Offset %lu exceeds buffer size %d\n", offset, BUFF_SIZE);
-            exit(1);
-        }
-        pointers[w] = (void **)((char *)base + offset);
-    }
-
-    // Link them circularly: 0->1->...->(ways-1)->0
-    for (int w = 0; w < ways; w++) {
-        *pointers[w] = pointers[(w + 1) % ways];
-    }
-
-    return pointers[0];
-}
-
-uint64_t get_time_serializing() {
-    uint64_t a, d;
-    unsigned int aux;
-    asm volatile("rdtscp" : "=a"(a), "=d"(d), "=c"(aux) : : "memory");
-    return (d << 32) | a;
-}
-
 void shuffle(int *array, size_t n) {
     if (n > 1) {
         for (size_t i = 0; i < n - 1; i++) {
@@ -65,6 +37,46 @@ void shuffle(int *array, size_t n) {
             array[i] = t;
         }
     }
+}
+
+void **setup_eviction_set(void *base, int set_index, int ways) {
+    void **pointers[ways];
+    int indices[ways];
+
+    // Initialize indices
+    for (int i = 0; i < ways; i++) {
+        indices[i] = i;
+    }
+
+    // Randomize the order to defeat hardware prefetcher
+    shuffle(indices, ways);
+    
+    // Calculate addresses based on shuffled indices
+    for (int i = 0; i < ways; i++) {
+        int w = indices[i];
+        uint64_t offset = (w * L2_STRIDE) + (set_index * CACHE_LINE_SIZE);
+        if (offset >= BUFF_SIZE) {
+            fprintf(stderr, "Error: Offset %lu exceeds buffer size %d\n", offset, BUFF_SIZE);
+            exit(1);
+        }
+        pointers[i] = (void **)((char *)base + offset);
+    }
+
+    // Link them circularly in the shuffled order: 
+    // pointers[0] -> pointers[1] -> ... -> pointers[ways-1] -> pointers[0]
+    for (int i = 0; i < ways; i++) {
+        *pointers[i] = pointers[(i + 1) % ways];
+    }
+
+    // Return the start of the shuffled chain
+    return pointers[0];
+}
+
+uint64_t get_time_serializing() {
+    uint64_t a, d;
+    unsigned int aux;
+    asm volatile("rdtscp" : "=a"(a), "=d"(d), "=c"(aux) : : "memory");
+    return (d << 32) | a;
 }
 
 void **traverse_list(void **start_node, int ways) {
