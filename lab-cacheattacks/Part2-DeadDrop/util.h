@@ -20,7 +20,9 @@
 #define CYCLES uint32_t
 
 // Prime+Probe Constants
+#ifndef BUFF_SIZE
 #define BUFF_SIZE (1<<21)
+#endif
 #define STRIDE (64 * 1024)
 #define WAY_COUNT 20
 #define SLOT_TIME 100000
