@@ -10,8 +10,7 @@
 #define L2_WAYS 16
 
 // Duration of one bit in cycles (approx 0.5 seconds at 2GHz)
-// Slower is safer for "basics"
-#define BIT_PERIOD (1ULL << 30) 
+#define BIT_PERIOD (1ULL << 29) // Reduced slightly for responsiveness
 
 int main(int argc, char **argv)
 {
@@ -34,8 +33,12 @@ int main(int argc, char **argv)
         printf("Sender: Calibration Mode (Sending continuous 1s)...\n");
         printf("Run receiver with ./receiver -c to measure threshold.\n");
         while (1) {
-            for (int s = 0; s < L2_SETS; s++) {
+            // Unroll loop for maximum aggression
+            for (int s = 0; s < L2_SETS; s+=4) {
                 traverse_list(sets[s], L2_WAYS);
+                traverse_list(sets[s+1], L2_WAYS);
+                traverse_list(sets[s+2], L2_WAYS);
+                traverse_list(sets[s+3], L2_WAYS);
             }
         }
     }
@@ -60,21 +63,21 @@ int main(int argc, char **argv)
             if (bit == '1') {
                 // SEND 1: Create contention by thrashing L2
                 while (get_time_serializing() < start + BIT_PERIOD) {
-                    for (int s = 0; s < L2_SETS; s++) {
+                    for (int s = 0; s < L2_SETS; s+=4) {
                         traverse_list(sets[s], L2_WAYS);
+                        traverse_list(sets[s+1], L2_WAYS);
+                        traverse_list(sets[s+2], L2_WAYS);
+                        traverse_list(sets[s+3], L2_WAYS);
                     }
                 }
             } else {
                 // SEND 0: Do nothing (low contention)
                 while (get_time_serializing() < start + BIT_PERIOD) {
-                    // Busy wait (nop) is better than sleep for precise timing,
-                    // but sleep is fine for coarse-grained.
-                    // We'll just spin lightly.
                     asm volatile("nop");
+                    // Small sleep to yield CPU resources (makes 0 cleaner)
+                    usleep(10); 
                 }
             }
-            // Optional: Small guard interval between bits?
-            // For now, no.
         }
         
         printf("Sent.\n");
