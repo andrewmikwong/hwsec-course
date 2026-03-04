@@ -57,23 +57,53 @@ void **traverse_list(void **start_node, int ways) {
     return p;
 }
 
-uint64_t measure_probe_time(void **start_node, int ways) {
-    uint64_t t1 = get_time_serializing();
-    traverse_list(start_node, ways);
-    uint64_t t2 = get_time_serializing();
-    return t2 - t1;
+// --- NEW: Paper Implementation ---
+uint64_t probe_16way_asm(void **start_node) {
+    uint64_t cycles;
+    
+    // We modify start_node in place (it becomes the last pointer), 
+    // so we use "+r" constraint.
+    asm volatile (
+        "lfence\n\t"            // Protect against instruction re-ordering
+        "rdtsc\n\t"             // Measure start time
+        "mov %%eax, %%edi\n\t"  // Save low 32 bits of start time
+        
+        // Pointer-chasing through the eviction set
+        // 16 moves for 16-way associativity (Skylake L2)
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        "mov (%1), %1\n\t"
+        
+        "lfence\n\t"            // Ensure loads complete before timing
+        "rdtsc\n\t"             // Measure end time
+        "sub %%edi, %%eax\n\t"  // Calculate elapsed cycles
+        : "=a" (cycles), "+r" (start_node)
+        : 
+        : "rdx", "edi", "memory"
+    );
+    
+    return cycles;
 }
 
 void hammer_set(void **start_node, int ways, uint64_t duration_cycles) {
     uint64_t start = get_time_serializing();
     void **p = start_node;
-    
-    // Unrolled loop for maximum memory pressure
     while (get_time_serializing() < start + duration_cycles) {
-        p = (void **)*p;
-        p = (void **)*p;
-        p = (void **)*p;
-        p = (void **)*p;
-        p = (void **)*p;
+        // Unrolled for pressure
+        p = (void **)*p; p = (void **)*p; p = (void **)*p; p = (void **)*p;
+        p = (void **)*p; p = (void **)*p; p = (void **)*p; p = (void **)*p;
     }
 }
