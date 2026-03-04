@@ -1,6 +1,6 @@
 include ../cpu.mk
 
-TARGETS=receiver sender test_unit
+TARGETS=receiver sender test_unit test_eviction
 UTILS=util.o lib_covert.o
 
 all: $(TARGETS)
@@ -22,6 +22,12 @@ receiver: receiver.o $(UTILS)
 
 test_unit: test_unit.o $(UTILS)
 	$(CC) $(CFLAGS) test_unit.o $(UTILS) -o test_unit
+
+test_eviction: test_eviction.o $(UTILS)
+	$(CC) $(CFLAGS) test_eviction.o $(UTILS) -o test_eviction
+
+run_test_eviction: test_eviction
+	taskset -c $(SENDER_CPU) ./test_eviction
 
 # Object files
 %.o: %.c
