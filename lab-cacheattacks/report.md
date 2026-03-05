@@ -12,5 +12,3 @@ lscpu --caches
 | L2    | 64 Bytes        | 16M        | 16                             | 1024           |             |
 | L3    | 64 Bytes        | 22M        | 11                             | 16384          |             |
 
-
-*test
