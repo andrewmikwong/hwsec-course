@@ -840,3 +840,60 @@ This page was last modified on 23 March 2020, at 23:05.
 
     Privacy policyAbout WikiChipDisclaimers 
 
+@burnsville:~/hwsec-course/lab-cacheattacks/Part2-DeadDrop$ lscpu
+Architecture:             x86_64
+  CPU op-mode(s):         32-bit, 64-bit
+  Address sizes:          46 bits physical, 48 bits virtual
+  Byte Order:             Little Endian
+CPU(s):                   32
+  On-line CPU(s) list:    0-31
+Vendor ID:                GenuineIntel
+  Model name:             Intel(R) Xeon(R) Silver 4110 CPU @ 2.10GHz
+    CPU family:           6
+    Model:                85
+    Thread(s) per core:   2
+    Core(s) per socket:   8
+    Socket(s):            2
+    Stepping:             4
+    CPU max MHz:          3000.0000
+    CPU min MHz:          800.0000
+    BogoMIPS:             4200.00
+    Flags:                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx f
+                          xsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts
+                          rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx s
+                          mx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadli
+                          ne_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cdp_l3 pti
+                           intel_ppin ssbd mba ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adju
+                          st bmi1 hle avx2 smep bmi2 erms invpcid rtm cqm mpx rdt_a avx512f avx512dq rdseed adx smap clf
+                          lushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_oc
+                          cup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts vnmi pku ospke md_clear flush_l1d
+                          arch_capabilities ibpb_exit_to_user
+Virtualization features:
+  Virtualization:         VT-x
+Caches (sum of all):
+  L1d:                    512 KiB (16 instances)
+  L1i:                    512 KiB (16 instances)
+  L2:                     16 MiB (16 instances)
+  L3:                     22 MiB (2 instances)
+NUMA:
+  NUMA node(s):           2
+  NUMA node0 CPU(s):      0-7,16-23
+  NUMA node1 CPU(s):      8-15,24-31
+Vulnerabilities:
+  Gather data sampling:   Mitigation; Microcode
+  Itlb multihit:          KVM: Mitigation: VMX disabled
+  L1tf:                   Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable
+  Mds:                    Mitigation; Clear CPU buffers; SMT vulnerable
+  Meltdown:               Mitigation; PTI
+  Mmio stale data:        Mitigation; Clear CPU buffers; SMT vulnerable
+  Reg file data sampling: Not affected
+  Retbleed:               Mitigation; IBRS
+  Spec rstack overflow:   Not affected
+  Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl
+  Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+  Spectre v2:             Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected;
+                          BHI Not affected
+  Srbds:                  Not affected
+  Tsx async abort:        Mitigation; Clear CPU buffers; SMT vulnerable
+  Vmscape:                Mitigation; IBPB before exit to userspace
+benluis@burnsville:~/hwsec-course/lab-cacheattacks/Part2-DeadDrop$
