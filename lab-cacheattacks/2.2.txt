@@ -1,1 +1,0 @@
-**Discussion Question 4 (Optional):** Describe your communication protocol to communicate a single-bit value. 

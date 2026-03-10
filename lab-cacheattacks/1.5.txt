@@ -1,3 +1,4 @@
 **Discussion Question 3:** Based on the generated histogram, report two thresholds, one to distinguish between L2 and L3 latency and the other to distinguish between L3 and DRAM latency. Put your answer in `1.5.txt`. 
 
 
+We see based on the graphs generated that the L2 latency is clusterest around 86-90, while the L3 latency is clusterest around 120-145. DRAM is clustered around 275-295. Two thresholds we should choose is around 105 or the midpoint between L2 and L3 clustering and about 210 for the L3 vs DRAM threshold
