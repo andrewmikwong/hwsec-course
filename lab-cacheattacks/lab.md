@@ -474,5 +474,3 @@ References
 [1] Colin Percival. "Cache missing for fun and profit". In: Proc. of BSDCan 2005. 2005. 
 [2] Eran Tromer, Dag Arne Osvik, and Adi Shamir. "Efficient Cache Attacks on AES, and Counter-measures". In: Journal of Cryptology 23.1 (Jan. 2010), pp. 37-71. 
 [3] Yunjing Xu et al. "An Exploration of L2 Cache Covert Channels in Virtualized Environments". In: Proceedings of the 3rd ACM Workshop on Cloud Computing Security Workshop. CCSW '11. 
-
-Would you like me to help you draft the technical answers for Table 1 or the threshold discussion in Section 1.5?
