@@ -1,0 +1,1 @@
+> **Discussion Question 6:** Describe your communication protocol. Please refer to Section 2.2 for the components involved in a protocol. 

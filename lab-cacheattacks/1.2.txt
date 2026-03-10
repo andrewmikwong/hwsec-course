@@ -1,4 +1,5 @@
-Question 1.2
+**Discussion Question 1:** Caches in modern processors are generally set-associative. Use the commands above to fill in the blanks in the following table.  The L1 line size has been filled in for you. Record the answers in `1.2.txt`. 
+
 
 Commands for replicating the results:
 ```
@@ -13,16 +14,3 @@ lscpu --caches
 | L2    | 64 Bytes        | 1MB        | 16                             | 1024           |             |
 | L3    | 64 Bytes        | 11MB       | 11                             | 16384          |             |
 
-
- **Exercise 2:** Compile and run the starter code and observe the L1 latency measurements. 
-> 
-> 
-
-**Measure DRAM latency.** You will now need to figure out how to measure the DRAM access latency. Place an address into DRAM and then use `measure_one_block_access_time` to measure its latency. 
-
-             :  L1   L2   L3   Mem
-Minimum      :    74    82   126   272
-Bottom decile:    74    82   128   276
-Median       :    76    82   130   294
-Top decile   :    78    84   134   298
-Maximum      :    78    90   630  1070

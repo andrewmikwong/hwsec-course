@@ -1,0 +1,3 @@
+**Discussion Question 3:** Based on the generated histogram, report two thresholds, one to distinguish between L2 and L3 latency and the other to distinguish between L3 and DRAM latency. Put your answer in `1.5.txt`. 
+
+

@@ -1,7 +1,6 @@
-Here is the document converted to Markdown format, preserved word-for-word as requested.
+Lab instructions copied and pasted for easy reference and for the discussion/questions
 
 ---
-
 Lab 2: Cache Side Channels 
 
 **Due date:** Monday March 9 11:59:59 PM ET 
@@ -16,7 +15,7 @@ Log in to our lab machine at the ip address: 152.2.135.251. To connect via ssh, 
 
 You will download the lab from github, and write your solutions and code in-place within the downloaded directories. The lab will ask to record answers in files of a given name in certain locations. To submit your lab, you will zip up the entire base directory (called "lab2-cacheattacks") that you downloaded and submit the zipped up file through Canvas. Please turn in only one submission per team, and add the names of you and your partner to a file called "PARTNERS.txt" 
 
-10 Introduction 
+1. Introduction 
 
 This lab explores the practical exploitation of hardware side channels. In the first part, you will sample the access latency of different cache levels in the memory subsystem. The latency numbers collected in part 1 will be helpful in creating a cache side/covert-channel. 
 
@@ -48,56 +47,42 @@ You will be given SSH access to a lab machine to run your code on and you will b
 
 **IMPORTANT:** You must set `SENDER_CPU` and `RECEIVER_CPU` to your assigned values before running code for any portion of this lab. 
 
-> 
-> **Exercise 1:** Modify the `SENDER_CPU` and `RECEIVER_CPU` variables in the `cpu.mk` to your assigned CPUs. Once you have configured these variables, you can remove the `$error` line from `cpu.mk` as well. 
-> 
-> 
+**Exercise 1:** Modify the `SENDER_CPU` and `RECEIVER_CPU` variables in the `cpu.mk` to your assigned CPUs. Once you have configured these variables, you can remove the `$error` line from `cpu.mk` as well. 
+
 
 1.2 Determine the Machine Architecture 
 
 Before exploiting any hardware side channels, you must first understand the machine architecture. There are a few commands that can help with this on Linux. 
 
-* 
-`lscpu`: provides information on the type of processor and some summary information about the architecture of the machine. 
+* `lscpu`: provides information on the type of processor and some summary information about the architecture of the machine. 
 
 
-* 
-`less /proc/cpuinfo`: provides detailed information about each logical processor in the machine. 
+* `less /proc/cpuinfo`: provides detailed information about each logical processor in the machine. 
 
 
-* 
-`getconf -a | grep CACHE`: displays the system configurations related to the cache. This will provide detailed information about how the cache is structured. The numbers that are reported using this command generally use Byte (B) as the unit. 
+* `getconf -a | grep CACHE`: displays the system configurations related to the cache. This will provide detailed information about how the cache is structured. The numbers that are reported using this command generally use Byte (B) as the unit. 
 
 
 
 In addition, WikiChip provides a lot of information specific to each processor and architecture. You can find a detailed architecture description of the lab machine in Skylake architecture, which additionally provides the raw latency number for accessing different levels of caches. 
 
-> 
-> **Discussion Question 1:** Caches in modern processors are generally set-associative. Use the commands above to fill in the blanks in the following table.  The L1 line size has been filled in for you. Record the answers in `1.2.txt`. 
-> 
-> 
-> 
-> **Hint:** You should be able to directly obtain the information for the first 3 columns using commands above and you will need to derive the number of sets from the previous columns. Raw latency can be obtained from the WikiChip document. 
-> 
-> 
 
-|  | Cache Line Size | Total Size | Number of Ways (Associativity) | Number of Sets | Raw Latency |
-| --- | --- | --- | --- | --- | --- |
-| **L1** | 64 Bytes 
+**Discussion Question 1:** Caches in modern processors are generally set-associative. Use the commands above to fill in the blanks in the following table.  The L1 line size has been filled in for you. Record the answers in `1.2.txt`. 
 
- |  |  |  |  |
-| **L2** |  |  |  |  |  |
-| **L3** |  |  |  |  |  |
-| 
+**Hint:** You should be able to directly obtain the information for the first 3 columns using commands above and you will need to derive the number of sets from the previous columns. Raw latency can be obtained from the WikiChip document. 
 
- |  |  |  |  |  |
+
+| Cache | Cache Line Size | Total Size | Number of Ways (Associativity) | Number of Sets | Raw Latency |
+|------:|----------------:|-----------:|-------------------------------:|---------------:|------------:|
+| L1    | 64 Bytes        | 32KB       | 8                              | 64             |             |
+| L2    | 64 Bytes        | 1MB        | 16                             | 1024           |             |
+| L3    | 64 Bytes        | 11MB       | 11                             | 16384          |             |
 
 1.3 Warm-up with C Syntax 
 
 Before we actually get started with timing measurements, you need to familiarize yourself with C syntax and several useful x86 instructions. This section gives a brief explanation for the code in `utility.h` and `main.c`. Please read the code in the file `utility.h` and understand the following functions. In the comments, you can find detailed explanations of the x86 instructions used in each function. 
 
-* 
-`rdtscp` and `rdtscp64`: Read the current timestamp counter of the processor. 
+*`rdtscp` and `rdtscp64`: Read the current timestamp counter of the processor. 
 
 
 * 
@@ -166,22 +151,16 @@ To help you to make sure that you are on the right track, we have provided a ref
 
 **Measure L1 latency.** We have provided example code in `main.c` to measure L1 latency. The idea is to (1) perform a load operation on a target address to bring the corresponding cache line into the L1 cache, and then (2) measure the access latency by counting the number of cycles it takes to re-access the same target address. You can compile the starter code using the command: `make`, and then run it with: `make run`. 
 
-> 
-> **Exercise 2:** Compile and run the starter code and observe the L1 latency measurements. 
-> 
-> 
+**Exercise 2:** Compile and run the starter code and observe the L1 latency measurements. 
+
 
 **Measure DRAM latency.** You will now need to figure out how to measure the DRAM access latency. Place an address into DRAM and then use `measure_one_block_access_time` to measure its latency. 
 
 * 
 **Hint:** You can leverage the instruction `clflush` to achieve this goal. 
 
-
-
-> 
-> **Exercise 3:** Fill in the code in `main.c` to populate the array `dram_latency` and report the medium DRAM latency. Compare your results with the reference implementation. 
-> 
-> 
+ 
+**Exercise 3:** Fill in the code in `main.c` to populate the array `dram_latency` and report the medium DRAM latency. Compare your results with the reference implementation. 
 
 **Measure L2 and L3 latency.** Next, you should move on to measure L2 and L3 cache latency. Similarly, you need to put a target address to the L2 cache and L3 cache. Simply accessing the target address will make the address reside in the L1 cache. Therefore, you need to access other addresses to evict the target address from the L1 cache. 
 
@@ -190,19 +169,12 @@ To help you to make sure that you are on the right track, we have provided a ref
 
 
 
-> 
-> **Discussion Question 2:** How many cache lines do you need to access to fill up the entire L2 cache and L3 cache respectively? You can derive the answer from Table 1. Put your answer in `1.4.txt`. 
-> 
-> 
-> 
-> **Hint:** You may not be able to reliably evict the target address due to noise.  This is common due to the following reasons. (1) Recall that the cache is set-associative, sometimes you may not get enough addresses that are mapped to the same cache set as the target address. It is possible because the cache mapping uses physical addresses, while the software uses virtual addresses.  (2) The cache replacement policy in modern processors is more advanced than what we learnt from the class. It may smartly decide to keep the target address instead of evicting it. To bypass the two scenarios above, you could try (1) use a buffer at the size that is 1.5x of your calculated size;  (2) access the eviction buffer multiple times. 
-> 
-> 
+ **Discussion Question 2:** How many cache lines do you need to access to fill up the entire L2 cache and L3 cache respectively? You can derive the answer from Table 1. Put your answer in `1.4.txt`.  
 
-> 
-> **Exercise 4:** Fill in the code in `main.c` to populate the array `l2_latency` and array `l3_latency`.  Report the medium L2 and L3 latency. Compare your results with the reference implementation. 
-> 
-> 
+**Hint:** You may not be able to reliably evict the target address due to noise.  This is common due to the following reasons. (1) Recall that the cache is set-associative, sometimes you may not get enough addresses that are mapped to the same cache set as the target address. It is possible because the cache mapping uses physical addresses, while the software uses virtual addresses.  (2) The cache replacement policy in modern processors is more advanced than what we learnt from the class. It may smartly decide to keep the target address instead of evicting it. To bypass the two scenarios above, you could try (1) use a buffer at the size that is 1.5x of your calculated size;  (2) access the eviction buffer multiple times. 
+
+**Exercise 4:** Fill in the code in `main.c` to populate the array `l2_latency` and array `l3_latency`.  Report the medium L2 and L3 latency. Compare your results with the reference implementation. 
+
 
 1.5 Visualize Latency Distribution 
 
@@ -216,8 +188,6 @@ We have provided two Python scripts, `run.py` and `graph.py`, to show you an exa
 
 * 
 `graph.py` - A python script that will plot the histogram of the samples collected from `run.py`. It will read the data from the folder `data` and generate a pdf file of the histogram in a folder called `graph`. 
-
-
 
 There exist several knobs - feel free to adjust them however you want. 
 
@@ -233,15 +203,11 @@ There exist several knobs - feel free to adjust them however you want.
 
 Note that the SkyLake architecture has very similar L1 and L2 latency; hence it may be difficult to distinguish L1 vs L2. However, the {L1, L2} vs L3 vs DRAM must be clearly distinguishable! 
 
-> 
-> **Exercise 5:** Generate the histogram pdf file using your binary code and compare it with the reference implementation. Include the histogram of the reference implementation and your implementation in your `solutions.pdf` document. See the submission guidelines in Section 1.6. 
-> 
-> 
+**Exercise 5:** Generate the histogram pdf file using your binary code and compare it with the reference implementation. Include the histogram of the reference implementation and your implementation in your `solutions.pdf` document. See the submission guidelines in Section 1.6. 
 
-> 
-> **Discussion Question 3:** Based on the generated histogram, report two thresholds, one to distinguish between L2 and L3 latency and the other to distinguish between L3 and DRAM latency. Put your answer in `1.5.txt`. 
-> 
-> 
+
+**Discussion Question 3:** Based on the generated histogram, report two thresholds, one to distinguish between L2 and L3 latency and the other to distinguish between L3 and DRAM latency. Put your answer in `1.5.txt`. 
+
 
 1.6 Submission and Grading 
 
@@ -363,10 +329,8 @@ You should come up with a tentative plan for (1) and (2), and then experimentall
 
 
 
-> 
-> **Discussion Question 4 (Optional):** Describe your communication protocol to communicate a single-bit value. 
-> 
-> 
+**Discussion Question 4 (Optional):** Describe your communication protocol to communicate a single-bit value. 
+ 
 
 **Common pitfalls:** If the receiver needs to measure the latency of multiple memory accesses, you should pay attention to the following micro-architectural features that can introduce substantial noise to your communication channel. 
 
@@ -385,11 +349,7 @@ You should come up with a tentative plan for (1) and (2), and then experimentall
 * 
 **Noisy or inconsistent results:** Because side channels exploit shared resources in unintended ways, the resulting covert channels can be quite noisy. Modern processors often contain optimizations that make them behave differently from the simplified architectures taught in class. This lab requires experimentation to find working approaches and values. You should not expect your solution to work on the very first attempt, so be sure to incrementally build up your solutions and verify that each step is working before proceeding. 
 
-
-
-> **Exercise 6 (Optional):** Derive the threshold for the decode operation. Implement a single-bit chatting client. 
-> 
-> 
+**Exercise 6 (Optional):** Derive the threshold for the decode operation. Implement a single-bit chatting client.  
 
 2.3 Transmitting An 8-bit Integer Across Processes 
 
@@ -432,9 +392,8 @@ if (buf == (void*) -1) {
 
 **Monitoring Hugepage Usage:** You can see if your huge page is being allocated or not by watching the status of `/proc/meminfo`. Namely, if you run `cat /proc/meminfo | grep HugePages_`, you should see the number of `HugePages_Free` decrease by 1 when your code is using one. 
 
-> **Discussion Question 5 (Optional):** Given a 64-bit virtual address, fill in the table below. The table is intended to help you to figure out how to find addresses that map to the same L2 cache set. 
-> 
-> 
+**Discussion Question 5 (Optional):** Given a 64-bit virtual address, fill in the table below. The table is intended to help you to figure out how to find addresses that map to the same L2 cache set. 
+
 
 | Page Size | Page Offset Bits | Page Number Bits | L2 Set Index Bits | L2 Set Index Fully Under Control? |
 | --- | --- | --- | --- | --- |
@@ -448,14 +407,10 @@ if (buf == (void*) -1) {
 
  |  |  |  |  |
 
-> **Discussion Question 6:** Describe your communication protocol. Please refer to Section 2.2 for the components involved in a protocol. 
-> 
-> 
+**Discussion Question 6:** Describe your communication protocol. Please refer to Section 2.2 for the components involved in a protocol. 
+ 
+**Exercise 7:** Implement a chatting client that can communicate an 8-bit integer. Please refer to the "Common Pitfalls" paragraph in Section 2.2 to debug your chat client. 
 
-> 
-> **Exercise 7:** Implement a chatting client that can communicate an 8-bit integer. Please refer to the "Common Pitfalls" paragraph in Section 2.2 to debug your chat client. 
-> 
-> 
 
 2.4 Submission, Grading and Checkoff 
 
@@ -499,10 +454,8 @@ while (true) {
 
 
 
-> 
-> **Exercise 8:** Complete the code in `attacker.c` to successfully extract the secret values from `victim-{2, 3, 4}`. 
-> 
-> 
+**Exercise 8:** Complete the code in `attacker.c` to successfully extract the secret values from `victim-{2, 3, 4}`. 
+ 
 
 Using tmux, screen, or simply two SSH connections, you should be able to run `make run_victim-N` in one terminal and `make run_attacker` in another terminal. These two make recipes will compile your code and start the two processes on the correct CPUs using `taskset`. If you have problems running the victim binary, you may need to run `chmod +x victim-N` within your lab directory. 
 

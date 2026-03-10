@@ -1,0 +1,2 @@
+**Discussion Question 5 (Optional):** Given a 64-bit virtual address, fill in the table below. The table is intended to help you to figure out how to find addresses that map to the same L2 cache set. 
+
