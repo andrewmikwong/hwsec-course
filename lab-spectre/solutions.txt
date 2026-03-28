@@ -1,0 +1,8 @@
+Discussion Question 1: How many addresses need to be flushed at the first step?
+We would need to flush 256 addresses, one for each possibly pyte value. Since the victim accesses the shared memory, each possible value of secret_data from 0x00 to 0xFF maps to a different page-sized offset in the shared memory region. To make the later reload significant, we should evict all candidate locations evicted first so that the one the victim touches stands out as a cache hit 
+
+Discussion Question 2: Now assume the attacker and victim no longer share a memory region.
+Would your attack still work? If not, what changes would you need to make to make it work?
+
+
+Not with Flush + Reload in the same form as it depends on a shared memory space that the attacker can access. Instead of a shared memory region, the attacker would need to switch to a cache side channel attack, focusing on same-cache-set monitoring instead of shared memory
