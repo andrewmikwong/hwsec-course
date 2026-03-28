@@ -6,3 +6,10 @@ Would your attack still work? If not, what changes would you need to make to mak
 
 
 Not with Flush + Reload in the same form as it depends on a shared memory space that the attacker can access. Instead of a shared memory region, the attacker would need to switch to a cache side channel attack, focusing on same-cache-set monitoring instead of shared memory
+
+
+Discussion Question 3: In our example, the attacker tries to leak the values in the array secret_part2. In a real-world attack, people can use Spectre to leak arbitrary values in the victim’s address space. Explain how the attacker can achieve this
+In this lab, the out-of-bounds access is aimed at a specific secret array, but the same spectre patter can be generalized to leak other values beause the transient load does not have to come from a fixed "secret array". The attacker's real goal is to make speculative execution read a byte from some target address and use the byte to influence a later memory access where the cache effects can be observed. The second step is the access into shared memory at an offset derived from the loaded byte, which turns the secret value into a measurable cache signal. This can be related to a real attack if the attacker can control or influence the pointer or index during speculation and can make the victim transietnly read from the other locations in the victim's address space and encode those bytes through the cache the same way. 
+
+Discussion Question 4: Try to tune the training parameters and answer this question: What is the fewest number of times you need to train the branch on line 9 in Listing 3 to make the attack work?
+There isn't a universal minimum that is guaranteed on every machine. The fewest number of training iterations is an empirical value that you determine through tuning this lab's machine: using small number of training runs, test reliability, and then increase when attack becomes stable. the minimum is the smallest number of in-bounds calls that makes the branch predictor reliably expect the branch to be taken before the out-of-bounds attempt and there is no set minimum for every machine.
