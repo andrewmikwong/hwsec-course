@@ -13,7 +13,7 @@
 
 #define CACHE_HIT_THRESHOLD 105
 #define NUM_TRIALS 1000
-#define NUM_TRAIN 10  // number of training calls before the actual attack
+#define NUM_TRAIN 10
 
 static inline void call_kernel_part2(int kernel_fd, char *shared_memory, size_t offset) {
     spectre_lab_command local_cmd;
