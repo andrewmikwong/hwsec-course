@@ -1,0 +1,6 @@
+**Discussion Question 5 (Optional):** Given a 64-bit virtual address, fill in the table below. The table is intended to help you to figure out how to find addresses that map to the same L2 cache set. 
+
+| Page Size | Page Offset Bits | Page Number Bits | L2 Set Index Bits | L2 Set Index Fully Under Control? |
+| --------- | ---------------: | ---------------: | ----------------- | --------------------------------- |
+| **4KB**   |               12 |               52 | bits 6–15         | No                                |
+| **2MB**   |               21 |               43 | bits 6–15         | Yes                               |
