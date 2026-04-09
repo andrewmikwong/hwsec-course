@@ -1,0 +1,5 @@
+ **Discussion Question 2:** How many cache lines do you need to access to fill up the entire L2 cache and L3 cache respectively? You can derive the answer from Table 1. Put your answer in `1.4.txt`. 
+
+
+L2: 16384 cache lines
+L3: 180224 cache lines

@@ -1,0 +1,16 @@
+**Discussion Question 1:** Caches in modern processors are generally set-associative. Use the commands above to fill in the blanks in the following table.  The L1 line size has been filled in for you. Record the answers in `1.2.txt`. 
+
+
+Commands for replicating the results:
+```
+ssh YourOnyen@152.2.135.251
+lscpu --caches
+```
+1.2 Discussion
+
+| Cache | Cache Line Size | Total Size | Number of Ways (Associativity) | Number of Sets | Raw Latency |
+|------:|----------------:|-----------:|-------------------------------:|---------------:|------------:|
+| L1    | 64 Bytes        | 32KB       | 8                              | 64             |             |
+| L2    | 64 Bytes        | 1MB        | 16                             | 1024           |             |
+| L3    | 64 Bytes        | 11MB       | 11                             | 16384          |             |
+

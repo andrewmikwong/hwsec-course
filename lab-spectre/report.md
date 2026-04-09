@@ -27,9 +27,6 @@
 **Describe the strategy you employed to extend the speculation window of the target branch in the victim.**
 
 
-
 ## 3-3
 
 **Assume you are an attacker looking to exploit a new machine that has the same kernel module installed as the one we attacked in this part. What information would you need to know about this new machine to port your attack? Could it be possible to determine this infomration experimentally? Briefly describe in 5 sentences or less.**
-
-
