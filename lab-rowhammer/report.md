@@ -8,9 +8,9 @@
 
 ## 2-1
 
-**Given a victim address 0x752C3000, what is the value of its Row id? The value of its Column id?**
+**Given a victim address 0x96ec3000, what is the value of its Row id? The value of its Column id?**
 
-**For the same address, assume an arbitrary XOR function for computing the Bank id, list all possible attacker addresses whose Row id is one more than 0x752C3000's Row id and all the other ids match, including the Bank id and Column id. Hint: there should be 16 such addresses total.**
+**For the same address, assume an arbitrary XOR function for computing the Bank id, list all possible attacker addresses whose Row id is one more than 0x96ec3000's Row id and all the other ids match, including the Bank id and Column id. Hint: there should be 16 such addresses total.**
 
 ## 2-3
 
@@ -22,7 +22,7 @@
 
 ## 4-2
 
-**Try different data pattern and include the bitflip observation statistics in the table below. Then answer the following questions:**
+**The default data pattern in part4.cc is to set aggressor rows to all 1’s and victim row to all 0’s. Try different data pattern and include the bitflip observation statistics in the table below. Then answer the following questions:**
 
 **Do your results match your expectations? What is the best pattern to trigger flips effectively?**
 
